@@ -1,4 +1,12 @@
+import 'package:flutter/material.dart';
+
 class AppConstants {
+  // Brand Colors
+  static const Color primaryColor = Color(0xFFFF8200); // Figma Orange
+  static const Color secondaryColor = Color(0xFF000000);
+  static const Color backgroundColor = Color(0xFFFFFFFF);
+  static const Color surfaceColor = Color(0xFFF5F5F5);
+
   // Collection Names
   static const String usersCollection = 'users';
   static const String vendorsCollection = 'vendors';
@@ -6,14 +14,14 @@ class AppConstants {
   static const String reviewsCollection = 'reviews';
   static const String ordersCollection = 'orders';
 
-  // Categories (Initial List)
+  // Categories (From Figma Design)
   static const List<String> categories = [
-    'Electronics',
-    'Food & Snacks',
+    'Food',
     'Fashion',
+    'Beauty',
+    'Electronics',
     'Services',
     'Books',
-    'Hostel Essentials',
     'Other'
   ];
 

@@ -7,6 +7,7 @@ import 'services/firestore_service.dart';
 import 'screens/home_screen.dart';
 import 'screens/login_screen.dart';
 import 'firebase_options.dart'; 
+import 'core/app_constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,8 @@ void main() async {
   );
 }
 
+
+
 class CampusPlugApp extends StatelessWidget {
   const CampusPlugApp({super.key});
 
@@ -36,8 +39,23 @@ class CampusPlugApp extends StatelessWidget {
       title: 'Campus Plug',
       theme: ThemeData(
         useMaterial3: true,
-        primarySwatch: Colors.indigo,
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        primaryColor: AppConstants.primaryColor,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppConstants.primaryColor,
+          primary: AppConstants.primaryColor,
+        ),
+        scaffoldBackgroundColor: AppConstants.backgroundColor,
+        fontFamily: 'Inter', // We can update pubspec.yaml for this
+        elevatedButtonTheme: ElevatedButtonThemeData(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppConstants.primaryColor,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 56),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(15),
+            ),
+          ),
+        ),
       ),
       home: const AuthWrapper(),
     );

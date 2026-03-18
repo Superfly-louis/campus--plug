@@ -41,6 +41,34 @@ class UserModel {
   factory UserModel.fromJson(Map<String, dynamic> json) => _$UserModelFromJson(json);
   Map<String, dynamic> toJson() => _$UserModelToJson(this);
 
+  UserModel copyWith({
+    String? fullName,
+    String? email,
+    String? phoneNumber,
+    String? profileImageUrl,
+    String? campusId,
+    String? campusName,
+    bool? isVendor,
+    String? vendorId,
+    DateTime? lastActive,
+    String? deviceToken,
+  }) {
+    return UserModel(
+      id: this.id,
+      fullName: fullName ?? this.fullName,
+      email: email ?? this.email,
+      phoneNumber: phoneNumber ?? this.phoneNumber,
+      profileImageUrl: profileImageUrl ?? this.profileImageUrl,
+      campusId: campusId ?? this.campusId,
+      campusName: campusName ?? this.campusName,
+      isVendor: isVendor ?? this.isVendor,
+      vendorId: vendorId ?? this.vendorId,
+      createdAt: this.createdAt,
+      lastActive: lastActive ?? this.lastActive,
+      deviceToken: deviceToken ?? this.deviceToken,
+    );
+  }
+
   // Helper for Firestore
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
     Map<String, dynamic> data = doc.data() as Map<String, dynamic>;

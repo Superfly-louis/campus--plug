@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../models/product_model.dart';
+import '../models/vendor_model.dart';
 import '../widgets/product_card.dart';
 import '../core/app_constants.dart';
 import 'product_detail_screen.dart';
@@ -14,188 +16,275 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedCategory = 'All';
+  String _selectedCategory = 'Food';
 
   @override
   Widget build(BuildContext context) {
+    final authService = Provider.of<AuthService>(context);
     final firestoreService = Provider.of<FirestoreService>(context);
 
     return Scaffold(
-      backgroundColor: Colors.grey[50], // Light grey for modern app look
-      
-      // Top Navigation / Header
+      backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
-          children: [
-            // Custom Header
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Campus Plug',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.indigo,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Top Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Campus Plug',
+                          style: TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w900,
+                            color: AppConstants.primaryColor,
+                          ),
                         ),
+                        Text(
+                          'Marketplace for students',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                    PopupMenuButton(
+                      icon: const CircleAvatar(
+                        backgroundColor: AppConstants.surfaceColor,
+                        child: Icon(Icons.person_outline, color: Colors.black),
                       ),
-                      Text(
-                        'Find everything you need.',
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
-                      ),
-                    ],
-                  ),
-                  CircleAvatar(
-                    backgroundImage: NetworkImage('https://via.placeholder.com/150'),
-                    radius: 20,
-                  ),
-                ],
-              ),
-            ),
-
-            // Search Bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(15),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.04),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'profile',
+                          child: Text('Profile'),
+                        ),
+                        const PopupMenuItem(
+                          value: 'logout',
+                          child: Text('Logout'),
+                        ),
+                      ],
+                      onSelected: (value) async {
+                        if (value == 'logout') {
+                          await authService.signOut();
+                        }
+                      },
                     ),
                   ],
                 ),
-                child: const TextField(
-                  decoration: InputDecoration(
-                    hintText: 'Search products...',
-                    prefixIcon: Icon(Icons.search, color: Colors.grey),
-                    border: InputBorder.none,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+              ),
+
+              // Search Bar
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: AppConstants.surfaceColor,
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  child: const TextField(
+                    decoration: InputDecoration(
+                      hintText: 'Search for anything...',
+                      border: InputBorder.none,
+                      icon: Icon(Icons.search, color: Colors.grey),
+                    ),
                   ),
                 ),
               ),
-            ),
 
-            // Category Chips
-            SizedBox(
-              height: 50,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 15),
-                children: _buildCategoryChips(),
+              const SizedBox(height: 24),
+
+              // Categories
+              SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  children: _buildCategoryChips(),
+                ),
               ),
-            ),
 
-            const SizedBox(height: 10),
+              const SizedBox(height: 32),
 
-            // Products Grid
-            Expanded(
-              child: StreamBuilder<List<ProductModel>>(
-                stream: _selectedCategory == 'All'
-                    ? firestoreService.getProductsByCampus(AppConstants.defaultCampusId)
-                    : firestoreService.getProductsByCategory(AppConstants.defaultCampusId, _selectedCategory),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+              // Trending on Campus Section
+              _buildSectionTitle('Trending on Campus'),
+              _buildHorizontalProducts(firestoreService),
 
-                  if (snapshot.hasError) {
-                    return Center(child: Text('Error: ${snapshot.error}'));
-                  }
+              const SizedBox(height: 32),
 
-                  final products = snapshot.data ?? [];
+              // Top Student Vendors Section
+              _buildSectionTitle('Top Student Vendors'),
+              _buildHorizontalVendors(firestoreService),
 
-                  if (products.isEmpty) {
-                    return Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.shopping_bag_outlined, size: 80, color: Colors.grey[300]),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'No products available right now.',
-                          style: TextStyle(color: Colors.grey),
-                        ),
-                      ],
-                    );
-                  }
+              const SizedBox(height: 32),
 
-                  return GridView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                      crossAxisCount: 2,
-                      crossAxisSpacing: 15,
-                      mainAxisSpacing: 15,
-                      childAspectRatio: 0.72,
-                    ),
-                    itemCount: products.length,
-                    itemBuilder: (context, index) {
-                      final product = products[index];
-                      return ProductCard(
-                        product: product,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ProductDetailScreen(product: product),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
-          ],
+              // Newly Added Section
+              _buildSectionTitle('Newly Added'),
+              _buildProductGrid(firestoreService),
+            ],
+          ),
         ),
       ),
-      
-      // Floating Action Button (Example: Add a product)
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
-        backgroundColor: Colors.indigo,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Sell Item', style: TextStyle(color: Colors.white)),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: 0,
+        selectedItemColor: AppConstants.primaryColor,
+        unselectedItemColor: Colors.grey,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), label: 'Explore'),
+          BottomNavigationBarItem(icon: Icon(Icons.storefront), label: 'Shop'),
+          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Messages'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
+        ],
       ),
     );
   }
 
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          ),
+          const Text(
+            'See All',
+            style: TextStyle(color: AppConstants.primaryColor, fontWeight: FontWeight.bold),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHorizontalProducts(FirestoreService firestoreService) {
+    return SizedBox(
+      height: 240,
+      child: StreamBuilder<List<ProductModel>>(
+        stream: firestoreService.getProductsByCampus(AppConstants.defaultCampusId),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final products = snapshot.data!;
+          if (products.isEmpty) return _buildEmptyState();
+          
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 5),
+                child: SizedBox(
+                  width: 170,
+                  child: ProductCard(
+                    product: products[index],
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => ProductDetailScreen(product: products[index])),
+                    ),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildHorizontalVendors(FirestoreService firestoreService) {
+    // Placeholder for vendors as we don't have a listVendors stream yet
+    return SizedBox(
+      height: 100,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 15),
+        itemCount: 5,
+        itemBuilder: (context, index) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Column(
+              children: [
+                CircleAvatar(
+                  radius: 30,
+                  backgroundColor: AppConstants.surfaceColor,
+                  backgroundImage: NetworkImage('https://via.placeholder.com/150/FF8200/FFFFFF?text=Vendor+${index + 1}'),
+                ),
+                const SizedBox(height: 8),
+                Text('Vendor ${index + 1}', style: const TextStyle(fontSize: 12)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildProductGrid(FirestoreService firestoreService) {
+    return StreamBuilder<List<ProductModel>>(
+      stream: firestoreService.getProductsByCampus(AppConstants.defaultCampusId),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox.shrink();
+        final products = snapshot.data!;
+        
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(20),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            childAspectRatio: 0.75,
+          ),
+          itemCount: products.length,
+          itemBuilder: (context, index) {
+            return ProductCard(
+              product: products[index],
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => ProductDetailScreen(product: products[index])),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   List<Widget> _buildCategoryChips() {
-    List<String> displayCategories = ['All', ...AppConstants.categories];
-    return displayCategories.map((category) {
+    return AppConstants.categories.map((category) {
       bool isSelected = _selectedCategory == category;
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: ChoiceChip(
           label: Text(category),
           selected: isSelected,
-          onSelected: (selected) {
-            setState(() {
-              _selectedCategory = category;
-            });
-          },
-          selectedColor: Colors.indigo,
+          onSelected: (selected) => setState(() => _selectedCategory = category),
+          selectedColor: AppConstants.primaryColor,
           labelStyle: TextStyle(
             color: isSelected ? Colors.white : Colors.black87,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
           ),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
-            side: BorderSide(
-              color: isSelected ? Colors.indigo : Colors.grey[200]!,
-            ),
-          ),
+          backgroundColor: AppConstants.surfaceColor,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
         ),
       );
     }).toList();
+  }
+
+  Widget _buildEmptyState() {
+    return const Center(
+      child: Text('No products yet. Be the first to sell!', style: TextStyle(color: Colors.grey)),
+    );
   }
 }
