@@ -5,17 +5,16 @@ import 'services/auth_service.dart';
 import 'services/firestore_service.dart';
 
 import 'screens/home_screen.dart';
+import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
-import 'firebase_options.dart'; 
+import 'firebase_options.dart';
 import 'core/app_constants.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
-  );
-  
+
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
   runApp(
     MultiProvider(
       providers: [
@@ -26,8 +25,6 @@ void main() async {
     ),
   );
 }
-
-
 
 class CampusPlugApp extends StatelessWidget {
   const CampusPlugApp({super.key});
@@ -57,7 +54,7 @@ class CampusPlugApp extends StatelessWidget {
           ),
         ),
       ),
-      home: const AuthWrapper(),
+      home: const SplashScreen(),
     );
   }
 }
@@ -68,7 +65,7 @@ class AuthWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
-    
+
     return StreamBuilder(
       stream: authService.authStateChanges,
       builder: (context, snapshot) {
@@ -77,7 +74,7 @@ class AuthWrapper extends StatelessWidget {
             body: Center(child: CircularProgressIndicator()),
           );
         }
-        
+
         if (snapshot.hasData) {
           return const HomeScreen(); // Placeholder
         } else {

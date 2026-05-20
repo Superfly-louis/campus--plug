@@ -18,7 +18,9 @@ class AuthService {
   Future<UserCredential?> signIn(String email, String password) async {
     try {
       UserCredential result = await _auth.signInWithEmailAndPassword(
-          email: email, password: password);
+        email: email,
+        password: password,
+      );
       await _loadUserProfile(result.user!.uid);
       return result;
     } catch (e) {
@@ -33,11 +35,20 @@ class AuthService {
     required String password,
     required String fullName,
     required String campusId,
+    bool isVendor = false,
   }) async {
     try {
       UserCredential result = await _auth.createUserWithEmailAndPassword(
-          email: email, password: password);
-      
+        email: email,
+        password: password,
+      );
+
+      final campusMap = AppConstants.campuses.firstWhere(
+        (c) => c['id'] == campusId,
+        orElse: () => AppConstants.campuses[0],
+      );
+      final campusName = campusMap['name'] ?? AppConstants.defaultCampusName;
+
       // Create initial user document
       UserModel newUser = UserModel(
         id: result.user!.uid,
@@ -46,8 +57,8 @@ class AuthService {
         phoneNumber: '',
         profileImageUrl: '',
         campusId: campusId,
-        campusName: AppConstants.defaultCampusName,
-        isVendor: false,
+        campusName: campusName,
+        isVendor: isVendor,
         createdAt: DateTime.now(),
         lastActive: DateTime.now(),
         deviceToken: '',

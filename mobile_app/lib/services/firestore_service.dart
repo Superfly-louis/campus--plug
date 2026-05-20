@@ -16,22 +16,29 @@ class FirestoreService {
         .where('campusId', isEqualTo: campusId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ProductModel.fromJson(doc.data()))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => ProductModel.fromJson(doc.data()))
+              .toList(),
+        );
   }
 
   // Fetch products by category & campus
-  Stream<List<ProductModel>> getProductsByCategory(String campusId, String categoryId) {
+  Stream<List<ProductModel>> getProductsByCategory(
+    String campusId,
+    String categoryId,
+  ) {
     return _db
         .collection(AppConstants.productsCollection)
         .where('campusId', isEqualTo: campusId)
         .where('categoryId', isEqualTo: categoryId)
         .orderBy('createdAt', descending: true)
         .snapshots()
-        .map((snapshot) => snapshot.docs
-            .map((doc) => ProductModel.fromJson(doc.data()))
-            .toList());
+        .map(
+          (snapshot) => snapshot.docs
+              .map((doc) => ProductModel.fromJson(doc.data()))
+              .toList(),
+        );
   }
 
   // Create a new product
@@ -46,7 +53,10 @@ class FirestoreService {
 
   // Fetch a single vendor by ID
   Future<VendorModel?> getVendor(String vendorId) async {
-    var doc = await _db.collection(AppConstants.vendorsCollection).doc(vendorId).get();
+    var doc = await _db
+        .collection(AppConstants.vendorsCollection)
+        .doc(vendorId)
+        .get();
     if (doc.exists) {
       return VendorModel.fromJson(doc.data()!);
     }
@@ -57,7 +67,10 @@ class FirestoreService {
 
   // Fetch user profile
   Future<UserModel?> getUserProfile(String userId) async {
-    var doc = await _db.collection(AppConstants.usersCollection).doc(userId).get();
+    var doc = await _db
+        .collection(AppConstants.usersCollection)
+        .doc(userId)
+        .get();
     if (doc.exists) {
       return UserModel.fromJson(doc.data()!);
     }
@@ -70,5 +83,57 @@ class FirestoreService {
         .collection(AppConstants.usersCollection)
         .doc(user.id)
         .set(user.toJson(), SetOptions(merge: true));
+  }
+
+  Future<void> createVendor({
+    required String userId,
+    required String shopName,
+    required String category,
+    required String description,
+    required String campusId,
+  }) async {
+    final docRef = _db.collection(AppConstants.vendorsCollection).doc();
+    await docRef.set({
+      'id': docRef.id,
+      'userId': userId,
+      'shopName': shopName,
+      'category': category,
+      'description': description,
+      'campusId': campusId,
+      'profileImageUrl': '',
+      'isVerified': false,
+      'rating': 0.0,
+      'totalSales': 0,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    // Link vendor to user
+    await _db.collection(AppConstants.usersCollection).doc(userId).update({
+      'isVendor': true,
+      'vendorId': docRef.id,
+    });
+  }
+
+  Future<void> addProduct({
+    required String vendorId,
+    required String name,
+    required String category,
+    required String description,
+    required double price,
+    required String campusId,
+    required String imageUrl,
+  }) async {
+    final docRef = _db.collection(AppConstants.productsCollection).doc();
+    await docRef.set({
+      'id': docRef.id,
+      'vendorId': vendorId,
+      'name': name,
+      'category': category,
+      'description': description,
+      'price': price,
+      'campusId': campusId,
+      'imageUrl': imageUrl,
+      'isAvailable': true,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
   }
 }

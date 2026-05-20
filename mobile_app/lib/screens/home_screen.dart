@@ -263,13 +263,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> _buildCategoryChips() {
     return AppConstants.categories.map((category) {
-      bool isSelected = _selectedCategory == category;
+      final String categoryName = category['name'] as String;
+      final String categoryIcon = category['icon'] as String;
+      bool isSelected = _selectedCategory == categoryName;
       return Padding(
         padding: const EdgeInsets.only(right: 8),
         child: ChoiceChip(
-          label: Text(category),
+          label: Text('$categoryIcon $categoryName'),
           selected: isSelected,
-          onSelected: (selected) => setState(() => _selectedCategory = category),
+          onSelected: (selected) {
+            if (selected) {
+              setState(() => _selectedCategory = categoryName);
+            }
+          },
           selectedColor: AppConstants.primaryColor,
           labelStyle: TextStyle(
             color: isSelected ? Colors.white : Colors.black87,
