@@ -7,23 +7,23 @@ part of 'user_model.dart';
 // **************************************************************************
 
 UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
-  id: json['id'] as String,
-  fullName: json['fullName'] as String,
-  email: json['email'] as String,
-  phoneNumber: json['phoneNumber'] as String,
-  profileImageUrl: json['profileImageUrl'] as String,
-  campusId: json['campusId'] as String,
-  campusName: json['campusName'] as String,
+  id: json['id'] as String? ?? '',
+  fullName: json['fullName'] as String? ?? '',
+  email: json['email'] as String? ?? '',
+  phoneNumber: json['phoneNumber'] as String? ?? '',
+  profileImageUrl: json['profileImageUrl'] as String? ?? '',
+  campusId: json['campusId'] as String? ?? '',
+  campusName: json['campusName'] as String? ?? '',
   isVendor: json['isVendor'] as bool? ?? false,
   vendorId: json['vendorId'] as String?,
   hasSelectedRole: json['hasSelectedRole'] as bool? ?? false,
-  createdAt: const TimestampConverter().fromJson(
-    json['createdAt'] as Timestamp,
-  ),
-  lastActive: const TimestampConverter().fromJson(
-    json['lastActive'] as Timestamp,
-  ),
-  deviceToken: json['deviceToken'] as String,
+  createdAt: json['createdAt'] != null 
+      ? const TimestampConverter().fromJson(json['createdAt'] as Timestamp)
+      : DateTime.now(),
+  lastActive: json['lastActive'] != null 
+      ? const TimestampConverter().fromJson(json['lastActive'] as Timestamp)
+      : DateTime.now(),
+  deviceToken: json['deviceToken'] as String? ?? '',
 );
 
 Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{

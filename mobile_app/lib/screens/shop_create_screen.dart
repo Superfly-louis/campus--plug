@@ -7,6 +7,7 @@ import '../core/app_constants.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/storage_service.dart';
+import '../core/auth_errors.dart';
 import 'add_product_screen.dart';
 
 class ShopCreateScreen extends StatefulWidget {
@@ -32,10 +33,7 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: false,
       ),
       body: SafeArea(
         child: SingleChildScrollView(
@@ -253,7 +251,7 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not create shop: $e')),
+          SnackBar(content: Text(friendlyAuthError(e))),
         );
       }
     } finally {

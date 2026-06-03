@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../core/app_constants.dart';
+import '../core/auth_errors.dart';
 import '../core/app_router.dart';
 import '../widgets/campus_plug_logo.dart';
 
@@ -130,7 +131,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: ${e.toString()}')),
+          SnackBar(content: Text(friendlyAuthError(e))),
         );
       }
     } finally {
