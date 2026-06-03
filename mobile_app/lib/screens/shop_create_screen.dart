@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../core/app_constants.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
+import '../services/storage_service.dart';
 import 'add_product_screen.dart';
 
 class ShopCreateScreen extends StatefulWidget {
@@ -18,6 +22,8 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
   String? _selectedCategory;
   String _selectedCampusId = AppConstants.campuses[0]['id']!;
   bool _isLoading = false;
+  XFile? _profileImage;
+  Uint8List? _profileImageBytes;
 
   @override
   Widget build(BuildContext context) {
@@ -90,9 +96,7 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
               const SizedBox(height: 20),
               _buildLabel('Profile Photo'),
               GestureDetector(
-                onTap: () {
-                  // TODO: implement image picker
-                },
+                onTap: _pickProfilePhoto,
                 child: Container(
                   height: 120,
                   width: double.infinity,
@@ -101,21 +105,30 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
                     borderRadius: BorderRadius.circular(15),
                     color: AppConstants.surfaceColor,
                   ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.upload_rounded,
-                        size: 40,
-                        color: AppConstants.primaryColor,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Upload Photo',
-                        style: TextStyle(color: AppConstants.primaryColor),
-                      ),
-                    ],
-                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _profileImageBytes != null
+                      ? Image.memory(
+                          _profileImageBytes!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                        )
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.upload_rounded,
+                              size: 40,
+                              color: AppConstants.primaryColor,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Upload Photo',
+                              style: TextStyle(
+                                color: AppConstants.primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 36),
@@ -146,8 +159,26 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
           ),
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(context, 2),
     );
+  }
+
+  Future<void> _pickProfilePhoto() async {
+    try {
+      final storageService = Provider.of<StorageService>(context, listen: false);
+      final picked = await storageService.pickImageFromGallery();
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _profileImage = picked;
+        _profileImageBytes = bytes;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not pick image: $e')),
+      );
+    }
   }
 
   Future<void> _handleNext() async {
@@ -164,16 +195,54 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
         context,
         listen: false,
       );
+      final storageService = Provider.of<StorageService>(
+        context,
+        listen: false,
+      );
       final user = authService.currentUserProfile;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Please sign in again')),
+          );
+        }
+        return;
+      }
 
-      await firestoreService.createVendor(
+      var logoUrl = '';
+      if (_profileImage != null) {
+        final ext = _profileImage!.name.split('.').last;
+        final uploaded = await storageService.tryUploadImage(
+          storagePath:
+              'users/${user.id}/shop_logo_${DateTime.now().millisecondsSinceEpoch}.$ext',
+          file: _profileImage!,
+        );
+        if (uploaded != null) {
+          logoUrl = uploaded;
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Photo upload skipped — continuing without shop image.',
+              ),
+            ),
+          );
+        }
+      }
+
+      final vendorId = await firestoreService.createVendor(
         userId: user.id,
         shopName: _shopNameController.text.trim(),
         category: _selectedCategory!,
         description: _descriptionController.text.trim(),
         campusId: _selectedCampusId,
+        logoUrl: logoUrl,
       );
+
+      authService.updateLocalProfile(
+        user.copyWith(isVendor: true, vendorId: vendorId),
+      );
+      await authService.reloadProfile();
 
       if (mounted) {
         Navigator.pushReplacement(
@@ -183,9 +252,9 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create shop: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -262,32 +331,4 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
       onChanged: onChanged,
     );
   }
-}
-
-BottomNavigationBar _buildBottomNav(BuildContext context, int currentIndex) {
-  return BottomNavigationBar(
-    currentIndex: currentIndex,
-    selectedItemColor: AppConstants.primaryColor,
-    unselectedItemColor: Colors.grey,
-    type: BottomNavigationBarType.fixed,
-    items: const [
-      BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.explore_outlined),
-        label: 'Explore',
-      ),
-      BottomNavigationBarItem(icon: Icon(Icons.store_outlined), label: 'Shop'),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.chat_bubble_outline),
-        label: 'Messages',
-      ),
-      BottomNavigationBarItem(
-        icon: Icon(Icons.person_outline),
-        label: 'Profile',
-      ),
-    ],
-    onTap: (index) {
-      // Navigation handled per screen
-    },
-  );
 }

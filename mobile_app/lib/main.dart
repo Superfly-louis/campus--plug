@@ -2,13 +2,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'services/auth_service.dart';
+import 'services/chat_service.dart';
 import 'services/firestore_service.dart';
+import 'services/storage_service.dart';
 
-import 'screens/home_screen.dart';
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
+import 'core/app_router.dart';
 import 'firebase_options.dart';
-import 'core/app_constants.dart';
+import 'core/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,6 +22,8 @@ void main() async {
       providers: [
         Provider<AuthService>(create: (_) => AuthService()),
         Provider<FirestoreService>(create: (_) => FirestoreService()),
+        Provider<StorageService>(create: (_) => StorageService()),
+        Provider<ChatService>(create: (_) => ChatService()),
       ],
       child: const CampusPlugApp(),
     ),
@@ -34,26 +38,7 @@ class CampusPlugApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Campus Plug',
-      theme: ThemeData(
-        useMaterial3: true,
-        primaryColor: AppConstants.primaryColor,
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: AppConstants.primaryColor,
-          primary: AppConstants.primaryColor,
-        ),
-        scaffoldBackgroundColor: AppConstants.backgroundColor,
-        fontFamily: 'Inter', // We can update pubspec.yaml for this
-        elevatedButtonTheme: ElevatedButtonThemeData(
-          style: ElevatedButton.styleFrom(
-            backgroundColor: AppConstants.primaryColor,
-            foregroundColor: Colors.white,
-            minimumSize: const Size(double.infinity, 56),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
-            ),
-          ),
-        ),
-      ),
+      theme: AppTheme.light,
       home: const SplashScreen(),
     );
   }
@@ -76,9 +61,10 @@ class AuthWrapper extends StatelessWidget {
         }
 
         if (snapshot.hasData) {
-          return const HomeScreen(); // Placeholder
+          final authService = Provider.of<AuthService>(context, listen: false);
+          return AppRouter.destinationFor(authService.currentUserProfile);
         } else {
-          return const LoginScreen(); // Placeholder
+          return const LoginScreen();
         }
       },
     );

@@ -1,7 +1,15 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../core/app_constants.dart';
+import '../core/auth_errors.dart';
+import '../core/app_router.dart';
+import '../widgets/auth/auth_illustration.dart';
+import '../widgets/auth/auth_pill_button.dart';
+import '../widgets/auth/auth_switch_link.dart';
+import '../widgets/auth/auth_text_field.dart';
 import 'signup_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -12,9 +20,17 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _obscurePassword = true;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,116 +40,71 @@ class _LoginScreenState extends State<LoginScreen> {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+          padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // Logo/Brand area (Matching Figma Illustration area)
-              const Center(
-                child: Hero(
-                  tag: 'app_logo',
-                  child: Icon(Icons.flash_on, color: AppConstants.primaryColor, size: 80),
-                ),
-              ),
-              const SizedBox(height: 30),
-              const Text(
+              const AuthIllustration(),
+              Text(
                 'Log In',
-                style: TextStyle(
+                style: GoogleFonts.syne(
                   fontSize: 32,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w800,
                   color: Colors.black,
                 ),
               ),
-              const SizedBox(height: 8),
-              const Text(
-                'Sign in to explore your campus marketplace.',
-                style: TextStyle(fontSize: 16, color: Colors.grey),
-              ),
-              const SizedBox(height: 48),
-
-              // Email Input
-              _buildTextField(
+              const SizedBox(height: 28),
+              AuthTextField(
+                label: 'E-mail',
                 controller: _emailController,
-                label: 'Email Address',
-                icon: Icons.email_outlined,
                 keyboardType: TextInputType.emailAddress,
               ),
-              const SizedBox(height: 20),
-              
-              // Password Input
-              _buildTextField(
-                controller: _passwordController,
+              const SizedBox(height: 18),
+              AuthTextField(
                 label: 'Password',
-                icon: Icons.lock_outline,
-                isPassword: true,
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                onToggleObscure: () =>
+                    setState(() => _obscurePassword = !_obscurePassword),
               ),
-              
-              const SizedBox(height: 12),
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton(
-                  onPressed: () {},
-                  child: const Text('Forgot Password?', style: TextStyle(color: AppConstants.primaryColor)),
-                ),
+              const SizedBox(height: 14),
+              AuthSwitchLink(
+                prompt: "Don't have an account?",
+                actionLabel: 'Sign Up',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const SignupScreen()),
+                  );
+                },
               ),
-              
-              const SizedBox(height: 32),
-
-              // Sign In Button
-              ElevatedButton(
-                onPressed: _isLoading 
-                    ? null 
-                    : () async {
-                        setState(() => _isLoading = true);
-                        try {
-                          await authService.signIn(
-                            _emailController.text.trim(),
-                            _passwordController.text.trim(),
-                          );
-                        } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Login failed: ${e.toString()}')),
-                          );
-                        } finally {
-                          if (mounted) setState(() => _isLoading = false);
-                        }
-                      },
-                child: _isLoading 
-                    ? const CircularProgressIndicator(color: Colors.white)
-                    : const Text(
-                        'Log In',
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                      ),
+              const SizedBox(height: 28),
+              AuthPillButton(
+                label: 'Log In',
+                isLoading: _isLoading,
+                onPressed: () => _handleLogin(authService),
               ),
-              
-              const SizedBox(height: 20),
-              
-              // Social Login
-              _buildSocialButton('Log in with Google', Icons.g_mobiledata, () {}),
-              const SizedBox(height: 12),
-              _buildSocialButton('Log in with Apple', Icons.apple, () {}),
-              
-              const SizedBox(height: 40),
-
-              // Register Link
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text("Don't have an account?"),
-                  TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const SignupScreen()),
-                      );
-                    },
-                    child: const Text(
-                      'Sign Up',
-                      style: TextStyle(color: AppConstants.primaryColor, fontWeight: FontWeight.bold),
-                    ),
+              const SizedBox(height: 14),
+              AuthPillButton(
+                label: 'Log In with Google',
+                variant: AuthPillButtonVariant.social,
+                icon: Text(
+                  'G',
+                  style: GoogleFonts.syne(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
                   ),
-                ],
+                ),
+                onPressed: () {},
               ),
+              const SizedBox(height: 12),
+              AuthPillButton(
+                label: 'Log In with Apple',
+                variant: AuthPillButtonVariant.social,
+                icon: const Icon(Icons.apple, size: 22),
+                onPressed: () {},
+              ),
+              const SizedBox(height: 32),
             ],
           ),
         ),
@@ -141,43 +112,31 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    bool isPassword = false,
-    TextInputType? keyboardType,
-  }) {
-    return TextField(
-      controller: controller,
-      obscureText: isPassword,
-      keyboardType: keyboardType,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Colors.grey),
-        filled: true,
-        fillColor: Colors.grey[50],
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide.none,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSocialButton(String label, IconData icon, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: OutlinedButton.icon(
-        onPressed: onPressed,
-        icon: Icon(icon, color: Colors.black),
-        label: Text(label, style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
-        style: OutlinedButton.styleFrom(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-          side: BorderSide(color: Colors.grey[300]!),
-        ),
-      ),
-    );
+  Future<void> _handleLogin(AuthService authService) async {
+    setState(() => _isLoading = true);
+    try {
+      await authService.signIn(
+        _emailController.text.trim(),
+        _passwordController.text.trim(),
+      );
+      if (authService.currentUserProfile == null) {
+        final current = FirebaseAuth.instance.currentUser;
+        if (current != null) {
+          await authService.ensureUserProfile(
+            uid: current.uid,
+            email: current.email ?? _emailController.text.trim(),
+          );
+        }
+      }
+      if (!mounted) return;
+      AppRouter.go(context, authService.currentUserProfile);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyAuthError(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 }

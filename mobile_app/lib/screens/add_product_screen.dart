@@ -1,9 +1,13 @@
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../core/app_constants.dart';
+import '../core/app_router.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
-import 'home_screen.dart';
+import '../services/storage_service.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -18,6 +22,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _priceController = TextEditingController();
   String? _selectedCategory;
   bool _isLoading = false;
+  XFile? _productImage;
+  Uint8List? _productImageBytes;
 
   @override
   Widget build(BuildContext context) {
@@ -81,9 +87,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
               const SizedBox(height: 20),
               _buildLabel('Upload Image'),
               GestureDetector(
-                onTap: () {
-                  // TODO: implement image picker
-                },
+                onTap: _pickProductImage,
                 child: Container(
                   height: 150,
                   width: double.infinity,
@@ -95,21 +99,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     borderRadius: BorderRadius.circular(15),
                     color: AppConstants.surfaceColor,
                   ),
-                  child: const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        Icons.upload_rounded,
-                        size: 44,
-                        color: AppConstants.primaryColor,
-                      ),
-                      SizedBox(height: 8),
-                      Text(
-                        'Tap to upload image',
-                        style: TextStyle(color: AppConstants.primaryColor),
-                      ),
-                    ],
-                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: _productImageBytes != null
+                      ? Image.memory(
+                          _productImageBytes!,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                        )
+                      : const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.upload_rounded,
+                              size: 44,
+                              color: AppConstants.primaryColor,
+                            ),
+                            SizedBox(height: 8),
+                            Text(
+                              'Tap to upload image',
+                              style: TextStyle(
+                                color: AppConstants.primaryColor,
+                              ),
+                            ),
+                          ],
+                        ),
                 ),
               ),
               const SizedBox(height: 20),
@@ -130,7 +143,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: _isLoading ? null : _skipToShop,
+                child: const Text(
+                  'Skip for now',
+                  style: TextStyle(color: AppConstants.textSecondary),
+                ),
+              ),
+              const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
                 height: 56,
@@ -161,6 +182,36 @@ class _AddProductScreenState extends State<AddProductScreen> {
     );
   }
 
+  Future<void> _skipToShop() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    await authService.reloadProfile();
+    if (!mounted) return;
+    AppRouter.go(
+      context,
+      authService.currentUserProfile,
+      homeTab: 2,
+    );
+  }
+
+  Future<void> _pickProductImage() async {
+    try {
+      final storageService = Provider.of<StorageService>(context, listen: false);
+      final picked = await storageService.pickImageFromGallery();
+      if (picked == null) return;
+      final bytes = await picked.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _productImage = picked;
+        _productImageBytes = bytes;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Could not pick image: $e')),
+      );
+    }
+  }
+
   Future<void> _handleSubmit() async {
     if (_nameController.text.trim().isEmpty ||
         _selectedCategory == null ||
@@ -170,38 +221,75 @@ class _AddProductScreenState extends State<AddProductScreen> {
       );
       return;
     }
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final user = authService.currentUserProfile;
+    final vendorId = user?.vendorId;
+
+    if (vendorId == null || vendorId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Shop not found. Please create your shop again.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
-      final authService = Provider.of<AuthService>(context, listen: false);
       final firestoreService = Provider.of<FirestoreService>(
         context,
         listen: false,
       );
-      final user = authService.currentUserProfile;
-      if (user == null) return;
-
-      await firestoreService.addProduct(
-        vendorId: user.vendorId ?? user.id,
-        name: _nameController.text.trim(),
-        category: _selectedCategory!,
-        description: _descriptionController.text.trim(),
-        price: double.tryParse(_priceController.text.trim()) ?? 0,
-        campusId: user.campusId,
-        imageUrl: '',
+      final storageService = Provider.of<StorageService>(
+        context,
+        listen: false,
       );
 
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (_) => const HomeScreen()),
-          (route) => false,
+      final imageUrls = <String>[];
+      if (_productImage != null) {
+        final ext = _productImage!.name.split('.').last;
+        final uploaded = await storageService.tryUploadImage(
+          storagePath:
+              'vendors/$vendorId/products/${DateTime.now().millisecondsSinceEpoch}.$ext',
+          file: _productImage!,
         );
+        if (uploaded != null) {
+          imageUrls.add(uploaded);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Image upload skipped — product saved without photo.',
+              ),
+            ),
+          );
+        }
       }
+
+      await firestoreService.addProduct(
+        vendorId: vendorId,
+        name: _nameController.text.trim(),
+        categoryId: _selectedCategory!,
+        description: _descriptionController.text.trim(),
+        price: double.tryParse(_priceController.text.trim()) ?? 0,
+        campusId: user!.campusId,
+        imageUrls: imageUrls,
+      );
+
+      await authService.reloadProfile();
+      if (!mounted) return;
+
+      AppRouter.go(
+        context,
+        authService.currentUserProfile,
+        homeTab: 2,
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not save product: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

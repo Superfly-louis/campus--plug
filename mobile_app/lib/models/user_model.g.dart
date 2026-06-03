@@ -14,8 +14,9 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
   profileImageUrl: json['profileImageUrl'] as String,
   campusId: json['campusId'] as String,
   campusName: json['campusName'] as String,
-  isVendor: json['isVendor'] as bool,
+  isVendor: json['isVendor'] as bool? ?? false,
   vendorId: json['vendorId'] as String?,
+  hasSelectedRole: json['hasSelectedRole'] as bool? ?? false,
   createdAt: const TimestampConverter().fromJson(
     json['createdAt'] as Timestamp,
   ),
@@ -35,6 +36,7 @@ Map<String, dynamic> _$UserModelToJson(UserModel instance) => <String, dynamic>{
   'campusName': instance.campusName,
   'isVendor': instance.isVendor,
   'vendorId': instance.vendorId,
+  'hasSelectedRole': instance.hasSelectedRole,
   'createdAt': const TimestampConverter().toJson(instance.createdAt),
   'lastActive': const TimestampConverter().toJson(instance.lastActive),
   'deviceToken': instance.deviceToken,

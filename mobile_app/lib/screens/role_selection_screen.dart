@@ -3,8 +3,8 @@ import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../services/firestore_service.dart';
 import '../core/app_constants.dart';
-import '../models/user_model.dart';
-import 'home_screen.dart';
+import '../core/app_router.dart';
+import '../widgets/campus_plug_logo.dart';
 
 class RoleSelectionScreen extends StatefulWidget {
   const RoleSelectionScreen({super.key});
@@ -26,10 +26,7 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Hero(
-                tag: 'app_logo',
-                child: Icon(Icons.flash_on, color: AppConstants.primaryColor, size: 100),
-              ),
+              const CampusPlugLogo(width: 200, heroTag: 'app_logo'),
               const SizedBox(height: 48),
               const Text(
                 'Are you a...',
@@ -119,16 +116,16 @@ class _RoleSelectionScreenState extends State<RoleSelectionScreen> {
       
       final currentUser = authService.currentUserProfile;
       if (currentUser != null) {
-        final updatedUser = currentUser.copyWith(isVendor: isVendor);
-        await firestoreService.updateProfile(updatedUser);
-      }
-      
-      if (mounted) {
-        Navigator.pushAndRemoveUntil(
-          context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-          (route) => false,
+        final updatedUser = currentUser.copyWith(
+          isVendor: isVendor,
+          hasSelectedRole: true,
         );
+        await firestoreService.updateProfile(updatedUser);
+        authService.updateLocalProfile(updatedUser);
+      }
+
+      if (mounted) {
+        AppRouter.go(context, authService.currentUserProfile);
       }
     } catch (e) {
       if (mounted) {

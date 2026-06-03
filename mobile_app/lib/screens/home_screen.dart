@@ -1,15 +1,20 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
+import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
 import '../models/product_model.dart';
-import '../models/vendor_model.dart';
 import '../widgets/product_card.dart';
 import '../core/app_constants.dart';
+import 'messages_screen.dart';
 import 'product_detail_screen.dart';
+import 'vendor_shop_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.initialTab = 0});
+
+  final int initialTab;
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -17,19 +22,108 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedCategory = 'Food';
+  late int _currentIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialTab;
+  }
 
   @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
     final firestoreService = Provider.of<FirestoreService>(context);
+    final chatService = Provider.of<ChatService>(context);
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    final profile = authService.currentUserProfile;
+    final vendorId = profile?.vendorId;
 
     return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
+      backgroundColor: AppConstants.backgroundColor,
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          _buildHomeTab(authService, firestoreService),
+          _buildPlaceholderTab('Explore', Icons.explore_outlined),
+          profile?.isVendor == true && vendorId != null && vendorId.isNotEmpty
+              ? VendorShopScreen(vendorId: vendorId)
+              : _buildPlaceholderTab('Shop', Icons.storefront),
+          const MessagesScreen(),
+          _buildPlaceholderTab('Profile', Icons.person_outline),
+        ],
+      ),
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (index) => setState(() => _currentIndex = index),
+        selectedItemColor: AppConstants.primaryColor,
+        unselectedItemColor: AppConstants.textSecondary,
+        showUnselectedLabels: true,
+        type: BottomNavigationBarType.fixed,
+        items: [
+          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.explore_outlined),
+            label: 'Explore',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.storefront),
+            label: 'Shop',
+          ),
+          BottomNavigationBarItem(
+            icon: userId == null
+                ? const Icon(Icons.chat_bubble_outline)
+                : StreamBuilder<int>(
+                    stream: chatService.watchTotalUnreadCount(userId),
+                    builder: (context, snapshot) {
+                      final count = snapshot.data ?? 0;
+                      return Badge(
+                        isLabelVisible: count > 0,
+                        backgroundColor: AppConstants.primaryColor,
+                        label: Text(
+                          count > 99 ? '99+' : '$count',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 10,
+                          ),
+                        ),
+                        child: const Icon(Icons.chat_bubble_outline),
+                      );
+                    },
+                  ),
+            label: 'Messages',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: 'Profile',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderTab(String title, IconData icon) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, size: 48, color: AppConstants.primaryColor.withValues(alpha: 0.5)),
+          const SizedBox(height: 12),
+          Text(
+            '$title — coming soon',
+            style: const TextStyle(color: AppConstants.textSecondary),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHomeTab(AuthService authService, FirestoreService firestoreService) {
+    return SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
               // Top Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
@@ -126,23 +220,8 @@ class _HomeScreenState extends State<HomeScreen> {
               // Newly Added Section
               _buildSectionTitle('Newly Added'),
               _buildProductGrid(firestoreService),
-            ],
-          ),
+          ],
         ),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: 0,
-        selectedItemColor: AppConstants.primaryColor,
-        unselectedItemColor: Colors.grey,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.explore_outlined), label: 'Explore'),
-          BottomNavigationBarItem(icon: Icon(Icons.storefront), label: 'Shop'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: 'Messages'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: 'Profile'),
-        ],
       ),
     );
   }
@@ -172,7 +251,12 @@ class _HomeScreenState extends State<HomeScreen> {
       child: StreamBuilder<List<ProductModel>>(
         stream: firestoreService.getProductsByCampus(AppConstants.defaultCampusId),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
           final products = snapshot.data!;
           if (products.isEmpty) return _buildEmptyState();
           

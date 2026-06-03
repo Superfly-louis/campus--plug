@@ -1,10 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../services/auth_service.dart';
 import '../core/app_constants.dart';
+import '../core/auth_errors.dart';
+import '../core/app_router.dart';
+import '../widgets/auth/auth_illustration.dart';
+import '../widgets/auth/auth_pill_button.dart';
+import '../widgets/auth/auth_switch_link.dart';
+import '../widgets/auth/auth_text_field.dart';
 import 'login_screen.dart';
-import 'shop_welcome_screen.dart';
-import 'home_screen.dart';
 
 class SignupScreen extends StatefulWidget {
   final bool isVendor;
@@ -15,132 +20,82 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
-  final _fullNameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
-  String _selectedCampusId = AppConstants.campuses[0]['id']!;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
 
   @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final authService = Provider.of<AuthService>(context);
+
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 28),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Center(
-                child: Icon(
-                  Icons.shopping_cart_rounded,
-                  color: AppConstants.primaryColor,
-                  size: 70,
-                ),
-              ),
-              const SizedBox(height: 24),
+              const AuthIllustration(),
               Text(
                 widget.isVendor ? 'Sign Up as Vendor' : 'Sign Up',
-                style: const TextStyle(
-                  fontSize: 30,
-                  fontWeight: FontWeight.w900,
+                style: GoogleFonts.syne(
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.black,
                 ),
               ),
-              const SizedBox(height: 32),
-              _buildField(
-                _fullNameController,
-                'Full Name',
-                Icons.person_outline,
+              const SizedBox(height: 28),
+              AuthTextField(
+                label: 'E-mail',
+                controller: _emailController,
+                keyboardType: TextInputType.emailAddress,
               ),
-              const SizedBox(height: 16),
-              _buildField(
-                _emailController,
-                'Email',
-                Icons.email_outlined,
-                type: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 16),
-              // Campus Dropdown
-              DropdownButtonFormField<String>(
-                value: _selectedCampusId,
-                decoration: _inputDecoration('Campus', Icons.school_outlined),
-                items: AppConstants.campuses.map((campus) {
-                  return DropdownMenuItem(
-                    value: campus['id'],
-                    child: Text(campus['name']!),
-                  );
-                }).toList(),
-                onChanged: (val) => setState(() => _selectedCampusId = val!),
-              ),
-              const SizedBox(height: 16),
-              _buildField(
-                _passwordController,
-                'Password',
-                Icons.lock_outline,
-                isPassword: true,
-                obscure: _obscurePassword,
-                toggleObscure: () =>
+              const SizedBox(height: 18),
+              AuthTextField(
+                label: 'Password',
+                controller: _passwordController,
+                obscureText: _obscurePassword,
+                onToggleObscure: () =>
                     setState(() => _obscurePassword = !_obscurePassword),
               ),
-              const SizedBox(height: 16),
-              _buildField(
-                _confirmPasswordController,
-                'Confirm Password',
-                Icons.lock_outline,
-                isPassword: true,
-                obscure: _obscureConfirm,
-                toggleObscure: () =>
+              const SizedBox(height: 18),
+              AuthTextField(
+                label: 'Confirm password',
+                controller: _confirmPasswordController,
+                obscureText: _obscureConfirm,
+                onToggleObscure: () =>
                     setState(() => _obscureConfirm = !_obscureConfirm),
               ),
+              const SizedBox(height: 14),
+              AuthSwitchLink(
+                prompt: 'Already have an account?',
+                actionLabel: 'Log In',
+                onTap: () {
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (_) => const LoginScreen()),
+                  );
+                },
+              ),
+              const SizedBox(height: 28),
+              AuthPillButton(
+                label: 'Sign Up',
+                isLoading: _isLoading,
+                onPressed: () => _handleSignup(authService),
+              ),
               const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _isLoading
-                      ? null
-                      : () => _handleSignup(authService),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppConstants.primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Sign Up',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Text('Already have an account? '),
-                  GestureDetector(
-                    onTap: () => Navigator.pushReplacement(
-                      context,
-                      MaterialPageRoute(builder: (_) => const LoginScreen()),
-                    ),
-                    child: const Text(
-                      'Log In',
-                      style: TextStyle(
-                        color: AppConstants.primaryColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
             ],
           ),
         ),
@@ -150,92 +105,37 @@ class _SignupScreenState extends State<SignupScreen> {
 
   Future<void> _handleSignup(AuthService authService) async {
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Passwords do not match')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
       return;
     }
     setState(() => _isLoading = true);
     try {
+      final email = _emailController.text.trim();
+      final namePart = email.split('@').first;
+      final fullName = namePart.isNotEmpty
+          ? namePart[0].toUpperCase() + namePart.substring(1)
+          : 'Campus User';
+
       await authService.signUp(
-        email: _emailController.text.trim(),
+        email: email,
         password: _passwordController.text.trim(),
-        fullName: _fullNameController.text.trim(),
-        campusId: _selectedCampusId,
+        fullName: fullName,
+        campusId: AppConstants.defaultCampusId,
         isVendor: widget.isVendor,
       );
       if (mounted) {
-        if (widget.isVendor) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const ShopWelcomeScreen()),
-          );
-        } else {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (_) => const HomeScreen()),
-          );
-        }
+        AppRouter.go(context, authService.currentUserProfile);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Sign up failed: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(friendlyAuthError(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  InputDecoration _inputDecoration(String label, IconData icon) {
-    return InputDecoration(
-      labelText: label,
-      prefixIcon: Icon(icon, color: Colors.grey),
-      filled: true,
-      fillColor: AppConstants.surfaceColor,
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: BorderSide.none,
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(color: AppConstants.borderColor),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(15),
-        borderSide: const BorderSide(
-          color: AppConstants.primaryColor,
-          width: 2,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildField(
-    TextEditingController controller,
-    String label,
-    IconData icon, {
-    TextInputType? type,
-    bool isPassword = false,
-    bool obscure = false,
-    VoidCallback? toggleObscure,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: type,
-      obscureText: isPassword ? obscure : false,
-      decoration: _inputDecoration(label, icon).copyWith(
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  obscure ? Icons.visibility_off : Icons.visibility,
-                  color: Colors.grey,
-                ),
-                onPressed: toggleObscure,
-              )
-            : null,
-      ),
-    );
   }
 }

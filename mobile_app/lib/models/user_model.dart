@@ -14,6 +14,8 @@ class UserModel {
   final String campusName;
   final bool isVendor;
   final String? vendorId;
+  @JsonKey(defaultValue: false)
+  final bool hasSelectedRole;
   
   @TimestampConverter()
   final DateTime createdAt;
@@ -33,6 +35,7 @@ class UserModel {
     required this.campusName,
     required this.isVendor,
     this.vendorId,
+    this.hasSelectedRole = false,
     required this.createdAt,
     required this.lastActive,
     required this.deviceToken,
@@ -50,6 +53,7 @@ class UserModel {
     String? campusName,
     bool? isVendor,
     String? vendorId,
+    bool? hasSelectedRole,
     DateTime? lastActive,
     String? deviceToken,
   }) {
@@ -63,6 +67,7 @@ class UserModel {
       campusName: campusName ?? this.campusName,
       isVendor: isVendor ?? this.isVendor,
       vendorId: vendorId ?? this.vendorId,
+      hasSelectedRole: hasSelectedRole ?? this.hasSelectedRole,
       createdAt: this.createdAt,
       lastActive: lastActive ?? this.lastActive,
       deviceToken: deviceToken ?? this.deviceToken,
