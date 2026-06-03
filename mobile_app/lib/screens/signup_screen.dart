@@ -20,15 +20,21 @@ class SignupScreen extends StatefulWidget {
 }
 
 class _SignupScreenState extends State<SignupScreen> {
+  final _formKey = GlobalKey<FormState>();
+  final _fullNameController = TextEditingController();
+  final _phoneNumberController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
+  String? _selectedCampusId;
   bool _isLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
 
   @override
   void dispose() {
+    _fullNameController.dispose();
+    _phoneNumberController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
@@ -57,26 +63,127 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
               ),
               const SizedBox(height: 28),
-              AuthTextField(
-                label: 'E-mail',
-                controller: _emailController,
-                keyboardType: TextInputType.emailAddress,
-              ),
-              const SizedBox(height: 18),
-              AuthTextField(
-                label: 'Password',
-                controller: _passwordController,
-                obscureText: _obscurePassword,
-                onToggleObscure: () =>
-                    setState(() => _obscurePassword = !_obscurePassword),
-              ),
-              const SizedBox(height: 18),
-              AuthTextField(
-                label: 'Confirm password',
-                controller: _confirmPasswordController,
-                obscureText: _obscureConfirm,
-                onToggleObscure: () =>
-                    setState(() => _obscureConfirm = !_obscureConfirm),
+              Form(
+                key: _formKey,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    AuthTextField(
+                      label: 'Full Name',
+                      controller: _fullNameController,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) return 'Full name is required';
+                        if (value.trim().length < 2) return 'Minimum 2 characters';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    AuthTextField(
+                      label: 'Phone Number',
+                      controller: _phoneNumberController,
+                      keyboardType: TextInputType.phone,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) return 'Phone number is required';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    AuthTextField(
+                      label: 'E-mail',
+                      controller: _emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      validator: (value) {
+                        if (value == null || value.trim().isEmpty) return 'E-mail is required';
+                        if (!value.contains('@') || !value.contains('.')) return 'Invalid e-mail format';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(left: 4, bottom: 8),
+                          child: Text(
+                            'Campus',
+                            style: GoogleFonts.syne(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppConstants.labelGreen,
+                            ),
+                          ),
+                        ),
+                        DropdownButtonFormField<String>(
+                          value: _selectedCampusId,
+                          style: GoogleFonts.syne(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w500,
+                            color: AppConstants.textPrimary,
+                          ),
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(AppConstants.authPillRadius),
+                              borderSide: const BorderSide(color: AppConstants.inputBorderOrange),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(AppConstants.authPillRadius),
+                              borderSide: const BorderSide(color: AppConstants.inputBorderOrange),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(AppConstants.authPillRadius),
+                              borderSide: const BorderSide(
+                                color: AppConstants.primaryColor,
+                                width: 1.5,
+                              ),
+                            ),
+                          ),
+                          items: AppConstants.campuses.map((campus) {
+                            return DropdownMenuItem<String>(
+                              value: campus['id'],
+                              child: Text(campus['name']!),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedCampusId = value;
+                            });
+                          },
+                          validator: (value) {
+                            if (value == null || value.isEmpty) return 'Please select a campus';
+                            return null;
+                          },
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    AuthTextField(
+                      label: 'Password',
+                      controller: _passwordController,
+                      obscureText: _obscurePassword,
+                      onToggleObscure: () =>
+                          setState(() => _obscurePassword = !_obscurePassword),
+                      validator: (value) {
+                        if (value == null || value.length < 6) return 'Minimum 6 characters';
+                        return null;
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    AuthTextField(
+                      label: 'Confirm password',
+                      controller: _confirmPasswordController,
+                      obscureText: _obscureConfirm,
+                      onToggleObscure: () =>
+                          setState(() => _obscureConfirm = !_obscureConfirm),
+                      validator: (value) {
+                        if (value != _passwordController.text) return 'Passwords do not match';
+                        return null;
+                      },
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 14),
               AuthSwitchLink(
@@ -104,25 +211,22 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _handleSignup(AuthService authService) async {
-    if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Passwords do not match')),
-      );
+    if (!_formKey.currentState!.validate()) {
       return;
     }
+    
     setState(() => _isLoading = true);
     try {
       final email = _emailController.text.trim();
-      final namePart = email.split('@').first;
-      final fullName = namePart.isNotEmpty
-          ? namePart[0].toUpperCase() + namePart.substring(1)
-          : 'Campus User';
+      final fullName = _fullNameController.text.trim();
+      final phoneNumber = _phoneNumberController.text.trim();
 
       await authService.signUp(
         email: email,
         password: _passwordController.text.trim(),
         fullName: fullName,
-        campusId: AppConstants.defaultCampusId,
+        phoneNumber: phoneNumber,
+        campusId: _selectedCampusId!,
         isVendor: widget.isVendor,
       );
       if (mounted) {

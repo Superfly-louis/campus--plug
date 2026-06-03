@@ -48,6 +48,7 @@ class AuthService {
     required String email,
     required String password,
     required String fullName,
+    required String phoneNumber,
     required String campusId,
     bool isVendor = false,
   }) async {
@@ -63,6 +64,7 @@ class AuthService {
         uid: result.user!.uid,
         fullName: fullName,
         email: email,
+        phoneNumber: phoneNumber,
         campusId: campusId,
       );
       return result;
@@ -72,6 +74,7 @@ class AuthService {
           email: email,
           password: password,
           fullName: fullName,
+          phoneNumber: phoneNumber,
           campusId: campusId,
           isVendor: isVendor,
         );
@@ -92,6 +95,7 @@ class AuthService {
     required String email,
     required String password,
     required String fullName,
+    required String phoneNumber,
     required String campusId,
     required bool isVendor,
   }) async {
@@ -111,6 +115,7 @@ class AuthService {
         uid: result.user!.uid,
         fullName: fullName,
         email: email,
+        phoneNumber: phoneNumber,
         campusId: campusId,
       );
     } else {
@@ -130,6 +135,7 @@ class AuthService {
     required String uid,
     required String fullName,
     required String email,
+    required String phoneNumber,
     required String campusId,
   }) async {
     final campusMap = AppConstants.campuses.firstWhere(
@@ -142,7 +148,7 @@ class AuthService {
       'id': uid,
       'fullName': fullName,
       'email': email,
-      'phoneNumber': '',
+      'phoneNumber': phoneNumber,
       'profileImageUrl': '',
       'campusId': campusId,
       'campusName': campusName,
@@ -168,7 +174,7 @@ class AuthService {
       id: uid,
       fullName: fullName,
       email: email,
-      phoneNumber: '',
+      phoneNumber: phoneNumber,
       profileImageUrl: '',
       campusId: campusId,
       campusName: campusName,

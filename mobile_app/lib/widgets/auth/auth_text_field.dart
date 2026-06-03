@@ -10,6 +10,7 @@ class AuthTextField extends StatelessWidget {
     this.keyboardType,
     this.obscureText = false,
     this.onToggleObscure,
+    this.validator,
   });
 
   final String label;
@@ -17,6 +18,7 @@ class AuthTextField extends StatelessWidget {
   final TextInputType? keyboardType;
   final bool obscureText;
   final VoidCallback? onToggleObscure;
+  final String? Function(String?)? validator;
 
   @override
   Widget build(BuildContext context) {
@@ -34,54 +36,52 @@ class AuthTextField extends StatelessWidget {
             ),
           ),
         ),
-        SizedBox(
-          height: AppConstants.authFieldHeight,
-          child: TextField(
-            controller: controller,
-            keyboardType: keyboardType,
-            obscureText: obscureText,
-            style: GoogleFonts.syne(
-              fontSize: 15,
-              fontWeight: FontWeight.w500,
-              color: AppConstants.textPrimary,
+        TextFormField(
+          controller: controller,
+          keyboardType: keyboardType,
+          obscureText: obscureText,
+          validator: validator,
+          style: GoogleFonts.syne(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: AppConstants.textPrimary,
+          ),
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            border: OutlineInputBorder(
+              borderRadius:
+                  BorderRadius.circular(AppConstants.authPillRadius),
+              borderSide:
+                  const BorderSide(color: AppConstants.inputBorderOrange),
             ),
-            decoration: InputDecoration(
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-              border: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(AppConstants.authPillRadius),
-                borderSide:
-                    const BorderSide(color: AppConstants.inputBorderOrange),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(AppConstants.authPillRadius),
-                borderSide:
-                    const BorderSide(color: AppConstants.inputBorderOrange),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius:
-                    BorderRadius.circular(AppConstants.authPillRadius),
-                borderSide: const BorderSide(
-                  color: AppConstants.primaryColor,
-                  width: 1.5,
-                ),
-              ),
-              suffixIcon: onToggleObscure != null
-                  ? IconButton(
-                      icon: Icon(
-                        obscureText
-                            ? Icons.visibility_off_outlined
-                            : Icons.visibility_outlined,
-                        color: Colors.grey.shade500,
-                        size: 22,
-                      ),
-                      onPressed: onToggleObscure,
-                    )
-                  : null,
+            enabledBorder: OutlineInputBorder(
+              borderRadius:
+                  BorderRadius.circular(AppConstants.authPillRadius),
+              borderSide:
+                  const BorderSide(color: AppConstants.inputBorderOrange),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius:
+                  BorderRadius.circular(AppConstants.authPillRadius),
+              borderSide: const BorderSide(
+                color: AppConstants.primaryColor,
+                width: 1.5,
+              ),
+            ),
+            suffixIcon: onToggleObscure != null
+                ? IconButton(
+                    icon: Icon(
+                      obscureText
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      color: Colors.grey.shade500,
+                      size: 22,
+                    ),
+                    onPressed: onToggleObscure,
+                  )
+                : null,
           ),
         ),
       ],
