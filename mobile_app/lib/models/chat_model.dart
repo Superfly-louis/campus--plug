@@ -17,6 +17,11 @@ class ChatModel {
   final Map<String, int> unreadCount;
   @TimestampConverter()
   final DateTime createdAt;
+  final String vendorId;
+  final String buyerId;
+  final String subject;
+  final String status; // 'active' or 'closed'
+  final Map<String, bool>? blocked;
 
   ChatModel({
     required this.id,
@@ -28,10 +33,29 @@ class ChatModel {
     required this.lastMessageSenderId,
     required this.unreadCount,
     required this.createdAt,
+    required this.vendorId,
+    required this.buyerId,
+    required this.subject,
+    required this.status,
+    this.blocked,
   });
 
-  factory ChatModel.fromJson(Map<String, dynamic> json) =>
-      _$ChatModelFromJson(json);
+  factory ChatModel.fromJson(Map<String, dynamic> json) {
+    // Populate default fields for backward compatibility
+    if (json['vendorId'] == null) {
+      json['vendorId'] = '';
+    }
+    if (json['buyerId'] == null) {
+      json['buyerId'] = '';
+    }
+    if (json['subject'] == null) {
+      json['subject'] = 'Order Chat';
+    }
+    if (json['status'] == null) {
+      json['status'] = 'active';
+    }
+    return _$ChatModelFromJson(json);
+  }
 
   Map<String, dynamic> toJson() => _$ChatModelToJson(this);
 
@@ -52,3 +76,4 @@ class ChatModel {
 
   int unreadForUser(String userId) => unreadCount[userId] ?? 0;
 }
+

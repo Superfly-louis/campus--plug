@@ -31,6 +31,7 @@ class AppConstants {
   static const String ordersCollection = 'orders';
   static const String chatsCollection = 'chats';
   static const String messagesCollection = 'messages';
+  static const String reviewsCollection = 'reviews';
 
   // Central University Ghana Campuses
   static const List<Map<String, String>> campuses = [
@@ -45,11 +46,10 @@ class AppConstants {
   // Product Categories
   static const List<Map<String, dynamic>> categories = [
     {'id': 'food', 'name': 'Food', 'icon': '🍔'},
-    {'id': 'fashion', 'name': 'Fashion', 'icon': '👗'},
-    {'id': 'beauty', 'name': 'Beauty', 'icon': '💄'},
-    {'id': 'electronics', 'name': 'Electronics', 'icon': '💻'},
     {'id': 'services', 'name': 'Services', 'icon': '🛠️'},
-    {'id': 'books', 'name': 'Books', 'icon': '📚'},
+    {'id': 'electronics', 'name': 'Electronics', 'icon': '💻'},
+    {'id': 'stationery', 'name': 'Stationery', 'icon': '📝'},
+    {'id': 'tutoring', 'name': 'Tutoring', 'icon': '📖'},
     {'id': 'other', 'name': 'Other', 'icon': '📦'},
   ];
 }

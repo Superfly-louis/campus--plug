@@ -6,11 +6,13 @@ import '../models/message_model.dart';
 class ChatBubble extends StatelessWidget {
   final MessageModel message;
   final bool isMe;
+  final bool isPending;
 
   const ChatBubble({
     super.key,
     required this.message,
     required this.isMe,
+    this.isPending = false,
   });
 
   @override
@@ -49,15 +51,47 @@ class ChatBubble extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 4),
-          Text(
-            timeLabel,
-            style: const TextStyle(
-              fontSize: 11,
-              color: AppConstants.textSecondary,
-            ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                timeLabel,
+                style: const TextStyle(
+                  fontSize: 11,
+                  color: AppConstants.textSecondary,
+                ),
+              ),
+              if (isMe) ...[
+                const SizedBox(width: 4),
+                _buildStatusIcon(),
+              ],
+            ],
           ),
         ],
       ),
     );
   }
+
+  Widget _buildStatusIcon() {
+    if (isPending) {
+      return const Icon(
+        Icons.access_time_rounded,
+        size: 12,
+        color: AppConstants.textSecondary,
+      );
+    }
+    if (message.isRead) {
+      return const Icon(
+        Icons.done_all_rounded,
+        size: 14,
+        color: Colors.blue,
+      );
+    }
+    return const Icon(
+      Icons.done_rounded,
+      size: 14,
+      color: AppConstants.textSecondary,
+    );
+  }
 }
+

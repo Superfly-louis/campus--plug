@@ -10,9 +10,15 @@ class MessageModel {
   final String senderId;
   final String senderName;
   final String text;
-  @TimestampConverter()
+  
+  @SafeTimestampConverter()
   final DateTime timestamp;
   final bool isRead;
+  final String chatId;
+  final String senderType; // 'vendor' or 'buyer'
+  
+  @TimestampConverterNullable()
+  final DateTime? readAt;
 
   MessageModel({
     required this.id,
@@ -21,10 +27,20 @@ class MessageModel {
     required this.text,
     required this.timestamp,
     required this.isRead,
+    required this.chatId,
+    required this.senderType,
+    this.readAt,
   });
 
-  factory MessageModel.fromJson(Map<String, dynamic> json) =>
-      _$MessageModelFromJson(json);
+  factory MessageModel.fromJson(Map<String, dynamic> json) {
+    if (json['chatId'] == null) {
+      json['chatId'] = '';
+    }
+    if (json['senderType'] == null) {
+      json['senderType'] = 'buyer'; // default fallback
+    }
+    return _$MessageModelFromJson(json);
+  }
 
   Map<String, dynamic> toJson() => _$MessageModelToJson(this);
 
@@ -36,3 +52,30 @@ class MessageModel {
     });
   }
 }
+
+class TimestampConverterNullable implements JsonConverter<DateTime?, Timestamp?> {
+  const TimestampConverterNullable();
+
+  @override
+  DateTime? fromJson(Timestamp? timestamp) => timestamp?.toDate();
+
+  @override
+  Timestamp? toJson(DateTime? date) => date != null ? Timestamp.fromDate(date) : null;
+}
+
+class SafeTimestampConverter implements JsonConverter<DateTime, dynamic> {
+  const SafeTimestampConverter();
+
+  @override
+  DateTime fromJson(dynamic val) {
+    if (val is Timestamp) {
+      return val.toDate();
+    }
+    return DateTime.now();
+  }
+
+  @override
+  dynamic toJson(DateTime date) => Timestamp.fromDate(date);
+}
+
+

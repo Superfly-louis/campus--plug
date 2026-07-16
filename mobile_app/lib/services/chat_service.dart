@@ -35,6 +35,8 @@ class ChatService {
     required String otherUserImage,
     required String currentUserName,
     required String currentUserImage,
+    required String vendorId,
+    required String subject,
   }) async {
     final existing = await _db
         .collection(AppConstants.chatsCollection)
@@ -44,6 +46,16 @@ class ChatService {
     for (final doc in existing.docs) {
       final participants = List<String>.from(doc['participants'] ?? []);
       if (participants.contains(otherUserId) && participants.length == 2) {
+        // Return existing chat but update vendorId/subject/status if missing
+        final data = doc.data();
+        if (data['vendorId'] == null || data['status'] == null) {
+          await doc.reference.update({
+            'vendorId': vendorId,
+            'buyerId': currentUserId,
+            'subject': subject,
+            'status': data['status'] ?? 'active',
+          });
+        }
         return doc.id;
       }
     }
@@ -68,6 +80,11 @@ class ChatService {
         otherUserId: 0,
       },
       'createdAt': FieldValue.serverTimestamp(),
+      'vendorId': vendorId,
+      'buyerId': currentUserId,
+      'subject': subject,
+      'status': 'active',
+      'blocked': <String, bool>{},
     });
 
     return docRef.id;
@@ -122,6 +139,9 @@ class ChatService {
       unreadCount[recipientId] = (unreadCount[recipientId] ?? 0) + 1;
     }
 
+    final buyerId = chatSnap.data()?['buyerId'] as String? ?? '';
+    final senderType = senderId == buyerId ? 'buyer' : 'vendor';
+
     final batch = _db.batch();
 
     batch.set(messageRef, {
@@ -131,6 +151,9 @@ class ChatService {
       'text': trimmed,
       'timestamp': FieldValue.serverTimestamp(),
       'isRead': false,
+      'chatId': chatId,
+      'senderType': senderType,
+      'readAt': null,
     });
 
     batch.update(chatRef, {
@@ -148,5 +171,45 @@ class ChatService {
     await _db.collection(AppConstants.chatsCollection).doc(chatId).update({
       'unreadCount.$userId': 0,
     });
+
+    // Also mark messages in the subcollection as read
+    final messagesQuery = await _db
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .collection(AppConstants.messagesCollection)
+        .where('senderId', isNotEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    final batch = _db.batch();
+    for (final doc in messagesQuery.docs) {
+      batch.update(doc.reference, {
+        'isRead': true,
+        'readAt': FieldValue.serverTimestamp(),
+      });
+    }
+    if (messagesQuery.docs.isNotEmpty) {
+      await batch.commit();
+    }
+  }
+
+  Future<void> closeChat(String chatId) async {
+    await _db.collection(AppConstants.chatsCollection).doc(chatId).update({
+      'status': 'closed',
+    });
+  }
+
+  Future<void> toggleBlock(String chatId, String userId, bool block) async {
+    await _db.collection(AppConstants.chatsCollection).doc(chatId).update({
+      'blocked.$userId': block,
+    });
+  }
+
+  Stream<ChatModel> watchChat(String chatId) {
+    return _db
+        .collection(AppConstants.chatsCollection)
+        .doc(chatId)
+        .snapshots()
+        .map((doc) => ChatModel.fromFirestore(doc));
   }
 }

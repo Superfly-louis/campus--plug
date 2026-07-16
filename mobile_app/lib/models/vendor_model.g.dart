@@ -20,6 +20,9 @@ VendorModel _$VendorModelFromJson(Map<String, dynamic> json) => VendorModel(
   ratingCount: (json['ratingCount'] as num).toInt(),
   isVerified: json['isVerified'] as bool,
   whatsappNumber: json['whatsappNumber'] as String,
+  campusId: json['campusId'] as String,
+  responseTimeMinutes: (json['responseTimeMinutes'] as num?)?.toInt(),
+  category: json['category'] as String?,
   location: const GeoPointConverter().fromJson(json['location']),
   createdAt: const TimestampConverter().fromJson(
     json['createdAt'] as Timestamp,
@@ -39,6 +42,9 @@ Map<String, dynamic> _$VendorModelToJson(VendorModel instance) =>
       'ratingCount': instance.ratingCount,
       'isVerified': instance.isVerified,
       'whatsappNumber': instance.whatsappNumber,
+      'campusId': instance.campusId,
+      'responseTimeMinutes': instance.responseTimeMinutes,
+      'category': instance.category,
       'location': const GeoPointConverter().toJson(instance.location),
       'createdAt': const TimestampConverter().toJson(instance.createdAt),
     };

@@ -40,6 +40,7 @@ class AuthService {
       uid: uid,
       fullName: fullName,
       email: email,
+      phoneNumber: '',
       campusId: campusId,
     );
   }
@@ -135,7 +136,7 @@ class AuthService {
     required String uid,
     required String fullName,
     required String email,
-    required String phoneNumber,
+    String phoneNumber = '',
     required String campusId,
   }) async {
     final campusMap = AppConstants.campuses.firstWhere(

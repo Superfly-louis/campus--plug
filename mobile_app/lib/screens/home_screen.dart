@@ -7,9 +7,12 @@ import '../services/firestore_service.dart';
 import '../models/product_model.dart';
 import '../widgets/product_card.dart';
 import '../core/app_constants.dart';
+import '../models/vendor_model.dart';
 import 'messages_screen.dart';
 import 'product_detail_screen.dart';
 import 'vendor_shop_screen.dart';
+import 'explore_screen.dart';
+import 'vendor_profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialTab = 0});
@@ -45,7 +48,7 @@ class _HomeScreenState extends State<HomeScreen> {
         index: _currentIndex,
         children: [
           _buildHomeTab(authService, firestoreService),
-          _buildPlaceholderTab('Explore', Icons.explore_outlined),
+          const ExploreScreen(),
           profile?.isVendor == true && vendorId != null && vendorId.isNotEmpty
               ? VendorShopScreen(vendorId: vendorId)
               : _buildPlaceholderTab('Shop', Icons.storefront),
@@ -286,27 +289,55 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildHorizontalVendors(FirestoreService firestoreService) {
-    // Placeholder for vendors as we don't have a listVendors stream yet
     return SizedBox(
       height: 100,
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: 15),
-        itemCount: 5,
-        itemBuilder: (context, index) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Column(
-              children: [
-                CircleAvatar(
-                  radius: 30,
-                  backgroundColor: AppConstants.surfaceColor,
-                  backgroundImage: NetworkImage('https://via.placeholder.com/150/FF8200/FFFFFF?text=Vendor+${index + 1}'),
+      child: StreamBuilder<List<VendorModel>>(
+        stream: firestoreService.getAllVendors(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+          final vendors = snapshot.data!;
+          if (vendors.isEmpty) return const Center(child: Text('No vendors yet', style: TextStyle(color: Colors.grey)));
+
+          return ListView.builder(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            itemCount: vendors.length > 5 ? 5 : vendors.length,
+            itemBuilder: (context, index) {
+              final vendor = vendors[index];
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => VendorProfileScreen(vendorId: vendor.id),
+                      ),
+                    );
+                  },
+                  child: Column(
+                    children: [
+                      CircleAvatar(
+                        radius: 30,
+                        backgroundColor: AppConstants.surfaceColor,
+                        backgroundImage: vendor.logoUrl.isNotEmpty ? NetworkImage(vendor.logoUrl) : null,
+                        child: vendor.logoUrl.isEmpty ? Text(vendor.businessName[0].toUpperCase()) : null,
+                      ),
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: 60,
+                        child: Text(
+                          vendor.businessName,
+                          style: const TextStyle(fontSize: 12),
+                          overflow: TextOverflow.ellipsis,
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 8),
-                Text('Vendor ${index + 1}', style: const TextStyle(fontSize: 12)),
-              ],
-            ),
+              );
+            },
           );
         },
       ),

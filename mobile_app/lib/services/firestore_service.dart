@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/product_model.dart';
 import '../models/vendor_model.dart';
 import '../models/user_model.dart';
+import '../models/review_model.dart';
 import '../core/app_constants.dart';
 
 class FirestoreService {
@@ -182,5 +183,95 @@ class FirestoreService {
         .where('vendorId', isEqualTo: vendorId)
         .snapshots()
         .map((snapshot) => _parseAndSortProducts(snapshot.docs));
+  }
+
+  // --- NEW VENDOR & REVIEW OPERATIONS ---
+
+  Stream<List<VendorModel>> getVendorsByCampus(String campusId) {
+    return _db
+        .collection(AppConstants.vendorsCollection)
+        .where('campusId', isEqualTo: campusId)
+        .snapshots()
+        .map((snapshot) {
+          final vendors = <VendorModel>[];
+          for (final doc in snapshot.docs) {
+            try {
+              vendors.add(VendorModel.fromJson(doc.data()));
+            } catch (_) {
+              // Skip legacy/incomplete documents
+            }
+          }
+          return vendors;
+        });
+  }
+
+  Stream<List<VendorModel>> getAllVendors() {
+    return _db
+        .collection(AppConstants.vendorsCollection)
+        .snapshots()
+        .map((snapshot) {
+          final vendors = <VendorModel>[];
+          for (final doc in snapshot.docs) {
+            try {
+              vendors.add(VendorModel.fromJson(doc.data()));
+            } catch (_) {
+              // Skip legacy/incomplete documents
+            }
+          }
+          return vendors;
+        });
+  }
+
+  Future<void> verifyVendor(String vendorId, bool isVerified) async {
+    await _db
+        .collection(AppConstants.vendorsCollection)
+        .doc(vendorId)
+        .update({'isVerified': isVerified});
+  }
+
+  Stream<List<ReviewModel>> getVendorReviews(String vendorId) {
+    return _db
+        .collection(AppConstants.reviewsCollection)
+        .where('vendorId', isEqualTo: vendorId)
+        .snapshots()
+        .map((snapshot) {
+          final reviews = snapshot.docs
+              .map((doc) => ReviewModel.fromFirestore(doc))
+              .toList();
+          reviews.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          return reviews;
+        });
+  }
+
+  Future<void> createReview(ReviewModel review) async {
+    final batch = _db.batch();
+    final reviewRef = _db.collection(AppConstants.reviewsCollection).doc(review.id);
+    batch.set(reviewRef, review.toJson());
+    await batch.commit();
+
+    await updateVendorRating(review.vendorId);
+  }
+
+  Future<void> updateVendorRating(String vendorId) async {
+    final query = await _db
+        .collection(AppConstants.reviewsCollection)
+        .where('vendorId', isEqualTo: vendorId)
+        .get();
+
+    final reviews = query.docs
+        .map((doc) => ReviewModel.fromFirestore(doc))
+        .toList();
+
+    int count = reviews.length;
+    double average = 0.0;
+    if (count > 0) {
+      double sum = reviews.fold(0.0, (acc, r) => acc + r.rating);
+      average = double.parse((sum / count).toStringAsFixed(1));
+    }
+
+    await _db.collection(AppConstants.vendorsCollection).doc(vendorId).update({
+      'ratingAverage': average,
+      'ratingCount': count,
+    });
   }
 }

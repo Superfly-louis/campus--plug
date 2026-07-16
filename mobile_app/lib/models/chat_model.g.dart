@@ -22,6 +22,13 @@ ChatModel _$ChatModelFromJson(Map<String, dynamic> json) => ChatModel(
   createdAt: const TimestampConverter().fromJson(
     json['createdAt'] as Timestamp,
   ),
+  vendorId: json['vendorId'] as String,
+  buyerId: json['buyerId'] as String,
+  subject: json['subject'] as String,
+  status: json['status'] as String,
+  blocked: (json['blocked'] as Map<String, dynamic>?)?.map(
+    (k, e) => MapEntry(k, e as bool),
+  ),
 );
 
 Map<String, dynamic> _$ChatModelToJson(ChatModel instance) => <String, dynamic>{
@@ -36,4 +43,9 @@ Map<String, dynamic> _$ChatModelToJson(ChatModel instance) => <String, dynamic>{
   'lastMessageSenderId': instance.lastMessageSenderId,
   'unreadCount': instance.unreadCount,
   'createdAt': const TimestampConverter().toJson(instance.createdAt),
+  'vendorId': instance.vendorId,
+  'buyerId': instance.buyerId,
+  'subject': instance.subject,
+  'status': instance.status,
+  'blocked': instance.blocked,
 };

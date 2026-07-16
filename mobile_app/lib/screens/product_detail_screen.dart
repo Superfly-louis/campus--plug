@@ -74,6 +74,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         otherUserImage: sellerImage,
         currentUserName: currentProfile.fullName,
         currentUserImage: currentProfile.profileImageUrl,
+        vendorId: product.vendorId,
+        subject: '${product.name} Order',
       );
 
       if (!mounted) return;

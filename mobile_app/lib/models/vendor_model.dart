@@ -16,6 +16,9 @@ class VendorModel {
   final int ratingCount;
   final bool isVerified;
   final String whatsappNumber;
+  final String campusId;
+  final int? responseTimeMinutes;
+  final String? category;
   
   @GeoPointConverter()
   final GeoPoint? location;
@@ -35,11 +38,24 @@ class VendorModel {
     required this.ratingCount,
     required this.isVerified,
     required this.whatsappNumber,
+    required this.campusId,
+    this.responseTimeMinutes,
+    this.category,
     this.location,
     required this.createdAt,
   });
 
-  factory VendorModel.fromJson(Map<String, dynamic> json) => _$VendorModelFromJson(json);
+  factory VendorModel.fromJson(Map<String, dynamic> json) {
+    // Inject category fallback from categories if category is missing
+    if (json['category'] == null && json['categories'] is List && (json['categories'] as List).isNotEmpty) {
+      json['category'] = (json['categories'] as List)[0];
+    }
+    // Inject campusId fallback from campusId or campus
+    if (json['campusId'] == null && json['campus'] != null) {
+      json['campusId'] = json['campus'];
+    }
+    return _$VendorModelFromJson(json);
+  }
   Map<String, dynamic> toJson() => _$VendorModelToJson(this);
 }
 
@@ -66,3 +82,4 @@ class TimestampConverter implements JsonConverter<DateTime, Timestamp> {
   @override
   Timestamp toJson(DateTime date) => Timestamp.fromDate(date);
 }
+
