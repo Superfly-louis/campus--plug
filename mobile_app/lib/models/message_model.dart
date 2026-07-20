@@ -1,6 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:json_annotation/json_annotation.dart';
-import 'user_model.dart';
 
 part 'message_model.g.dart';
 
@@ -20,6 +19,9 @@ class MessageModel {
   @TimestampConverterNullable()
   final DateTime? readAt;
 
+  @JsonKey(includeFromJson: false, includeToJson: false)
+  final bool isPending;
+
   MessageModel({
     required this.id,
     required this.senderId,
@@ -30,6 +32,7 @@ class MessageModel {
     required this.chatId,
     required this.senderType,
     this.readAt,
+    this.isPending = false,
   });
 
   factory MessageModel.fromJson(Map<String, dynamic> json) {
@@ -45,11 +48,38 @@ class MessageModel {
   Map<String, dynamic> toJson() => _$MessageModelToJson(this);
 
   factory MessageModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>;
+    final data = doc.data() as Map<String, dynamic>? ?? {};
+    final isPending = doc.metadata.hasPendingWrites;
     return MessageModel.fromJson({
       ...data,
       'id': data['id'] ?? doc.id,
-    });
+    }).copyWith(isPending: isPending);
+  }
+
+  MessageModel copyWith({
+    String? id,
+    String? senderId,
+    String? senderName,
+    String? text,
+    DateTime? timestamp,
+    bool? isRead,
+    String? chatId,
+    String? senderType,
+    DateTime? readAt,
+    bool? isPending,
+  }) {
+    return MessageModel(
+      id: id ?? this.id,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      text: text ?? this.text,
+      timestamp: timestamp ?? this.timestamp,
+      isRead: isRead ?? this.isRead,
+      chatId: chatId ?? this.chatId,
+      senderType: senderType ?? this.senderType,
+      readAt: readAt ?? this.readAt,
+      isPending: isPending ?? this.isPending,
+    );
   }
 }
 

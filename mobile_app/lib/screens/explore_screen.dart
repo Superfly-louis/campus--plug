@@ -6,6 +6,7 @@ import '../core/app_constants.dart';
 import '../models/vendor_model.dart';
 import '../services/firestore_service.dart';
 import 'vendor_profile_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -14,32 +15,99 @@ class ExploreScreen extends StatefulWidget {
   State<ExploreScreen> createState() => _ExploreScreenState();
 }
 
-class _ExploreScreenState extends State<ExploreScreen> {
+class _ExploreScreenState extends State<ExploreScreen>
+    with WidgetsBindingObserver, AutomaticKeepAliveClientMixin {
   final TextEditingController _searchController = TextEditingController();
   Timer? _debounceTimer;
   String _searchQuery = '';
   String _selectedCategory = 'All';
   String _sortBy = 'Top Rated'; // 'Top Rated', 'Newest', 'Most Orders'
-  bool _isLoadingSkeleton = true;
+
+  List<VendorModel>? _cachedVendors;
+  DateTime? _lastFetchTime;
+  bool _isLoading = true;
+  String? _fetchError;
+  Timer? _refreshTimer;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    // Simulate initial skeleton loader for 1.5 seconds to enhance UX
-    Future.delayed(const Duration(milliseconds: 1500), () {
-      if (mounted) {
-        setState(() {
-          _isLoadingSkeleton = false;
-        });
+    WidgetsBinding.instance.addObserver(this);
+    _fetchVendors();
+    _refreshTimer = Timer.periodic(const Duration(minutes: 5), (_) {
+      if (mounted && !_isLoading) {
+        _fetchVendors(showLoading: false);
       }
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _refreshTimer?.cancel();
     _searchController.dispose();
     _debounceTimer?.cancel();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkAndRefreshCache();
+    }
+  }
+
+  Future<void> _checkAndRefreshCache() async {
+    if (_lastFetchTime == null) return;
+    final now = DateTime.now();
+    final diff = now.difference(_lastFetchTime!).inMinutes;
+    if (diff >= 5) {
+      await _fetchVendors(showLoading: false);
+    }
+  }
+
+  Future<void> _fetchVendors({bool showLoading = true}) async {
+    if (showLoading && mounted) {
+      setState(() {
+        _isLoading = true;
+        _fetchError = null;
+      });
+    }
+
+    try {
+      final firestoreService = Provider.of<FirestoreService>(
+        context,
+        listen: false,
+      );
+      final vendors = await firestoreService.fetchVendorsByCampusFuture(
+        AppConstants.defaultCampusId,
+      );
+
+      if (mounted) {
+        if (showLoading) {
+          // Guarantee min 1.5 seconds skeleton to avoid flash
+          await Future.delayed(const Duration(milliseconds: 1500));
+        }
+        if (mounted) {
+          setState(() {
+            _cachedVendors = vendors;
+            _lastFetchTime = DateTime.now();
+            _isLoading = false;
+            _fetchError = null;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _fetchError = e.toString();
+        });
+      }
+    }
   }
 
   void _onSearchChanged(String query) {
@@ -66,7 +134,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final firestoreService = Provider.of<FirestoreService>(context);
+    super.build(context);
 
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
@@ -97,12 +165,20 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 controller: _searchController,
                 onChanged: _onSearchChanged,
                 decoration: InputDecoration(
-                  hintText: 'Search vendors, food, tutoring...',
-                  hintStyle: GoogleFonts.syne(color: AppConstants.textSecondary),
-                  prefixIcon: const Icon(Icons.search, color: AppConstants.textSecondary),
+                  hintText: 'Search vendors, food, services...',
+                  hintStyle: GoogleFonts.syne(
+                    color: AppConstants.textSecondary,
+                  ),
+                  prefixIcon: const Icon(
+                    Icons.search,
+                    color: AppConstants.textSecondary,
+                  ),
                   suffixIcon: _searchController.text.isNotEmpty
                       ? IconButton(
-                          icon: const Icon(Icons.clear, color: AppConstants.textSecondary),
+                          icon: const Icon(
+                            Icons.clear,
+                            color: AppConstants.textSecondary,
+                          ),
                           onPressed: () {
                             _searchController.clear();
                             setState(() {
@@ -118,28 +194,67 @@ class _ExploreScreenState extends State<ExploreScreen> {
             ),
           ),
 
-          // Stream builder to load all vendors on this campus
+          // Main Content
           Expanded(
-            child: StreamBuilder<List<VendorModel>>(
-              stream: firestoreService.getVendorsByCampus(AppConstants.defaultCampusId),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting || _isLoadingSkeleton) {
+            child: Builder(
+              builder: (context) {
+                if (_isLoading) {
                   return _buildSkeletonLoader();
                 }
 
-                if (snapshot.hasError) {
+                if (_cachedVendors == null) {
                   return Center(
-                    child: Text(
-                      'Error: ${snapshot.error}',
-                      style: GoogleFonts.syne(color: Colors.red),
+                    child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(
+                            Icons.cloud_off,
+                            size: 48,
+                            color: AppConstants.textSecondary,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Failed to load vendors. Please try again.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.syne(color: Colors.red),
+                          ),
+                          if (_fetchError != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              _fetchError!,
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.syne(
+                                color: AppConstants.textSecondary,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                          const SizedBox(height: 24),
+                          ElevatedButton.icon(
+                            onPressed: _fetchVendors,
+                            icon: const Icon(Icons.refresh),
+                            label: Text(
+                              'Retry',
+                              style: GoogleFonts.syne(color: Colors.white),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppConstants.primaryColor,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 }
 
-                final allVendors = snapshot.data ?? [];
+                final allVendors = _cachedVendors!;
 
                 // Compute counts per category from actual fetched data
-                final Map<String, int> categoryCounts = {'All': allVendors.length};
+                final Map<String, int> categoryCounts = {
+                  'All': allVendors.length,
+                };
                 for (final vendor in allVendors) {
                   final cat = vendor.category ?? 'other';
                   categoryCounts[cat] = (categoryCounts[cat] ?? 0) + 1;
@@ -149,29 +264,43 @@ class _ExploreScreenState extends State<ExploreScreen> {
                 var filtered = allVendors;
                 if (_selectedCategory != 'All') {
                   filtered = allVendors
-                      .where((v) => (v.category ?? 'other').toLowerCase() == _selectedCategory.toLowerCase())
+                      .where(
+                        (v) =>
+                            (v.category ?? 'other').toLowerCase() ==
+                            _selectedCategory.toLowerCase(),
+                      )
                       .toList();
                 }
 
-                // Apply search filtering
+                // Apply search filtering (AND logic)
                 if (_searchQuery.isNotEmpty) {
                   filtered = filtered.where((v) {
-                    final nameMatch = v.businessName.toLowerCase().contains(_searchQuery);
-                    final descMatch = v.description.toLowerCase().contains(_searchQuery);
-                    final catMatch = (v.category ?? '').toLowerCase().contains(_searchQuery);
+                    final nameMatch = v.businessName.toLowerCase().contains(
+                      _searchQuery,
+                    );
+                    final descMatch = v.description.toLowerCase().contains(
+                      _searchQuery,
+                    );
+                    final catMatch = (v.category ?? '').toLowerCase().contains(
+                      _searchQuery,
+                    );
                     return nameMatch || descMatch || catMatch;
                   }).toList();
                 }
 
                 // Apply sorting
                 if (_sortBy == 'Top Rated') {
-                  filtered.sort((a, b) => b.ratingAverage.compareTo(a.ratingAverage));
+                  filtered.sort((a, b) {
+                    int cmp = b.ratingAverage.compareTo(a.ratingAverage);
+                    if (cmp == 0) return b.ratingCount.compareTo(a.ratingCount);
+                    return cmp;
+                  });
                 } else if (_sortBy == 'Newest') {
                   filtered.sort((a, b) => b.createdAt.compareTo(a.createdAt));
                 } else if (_sortBy == 'Most Orders') {
-                  // For Phase 0, we can sort by ratingCount as a proxy or if we decide to maintain a specific orders count.
-                  // We'll sort by ratingCount descending.
-                  filtered.sort((a, b) => b.ratingCount.compareTo(a.ratingCount));
+                  filtered.sort(
+                    (a, b) => b.completedOrders.compareTo(a.completedOrders),
+                  );
                 }
 
                 return Column(
@@ -196,7 +325,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
 
                     // Sort Dropdown & results count
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -219,20 +351,29 @@ class _ExploreScreenState extends State<ExploreScreen> {
                               ),
                               DropdownButton<String>(
                                 value: _sortBy,
-                                icon: const Icon(Icons.arrow_drop_down, color: AppConstants.primaryColor),
+                                icon: const Icon(
+                                  Icons.arrow_drop_down,
+                                  color: AppConstants.primaryColor,
+                                ),
                                 underline: const SizedBox(),
                                 style: GoogleFonts.syne(
                                   color: AppConstants.primaryColor,
                                   fontWeight: FontWeight.bold,
                                   fontSize: 14,
                                 ),
-                                items: <String>['Top Rated', 'Newest', 'Most Orders']
-                                    .map<DropdownMenuItem<String>>((String value) {
-                                  return DropdownMenuItem<String>(
-                                    value: value,
-                                    child: Text(value),
-                                  );
-                                }).toList(),
+                                items:
+                                    <String>[
+                                      'Top Rated',
+                                      'Newest',
+                                      'Most Orders',
+                                    ].map<DropdownMenuItem<String>>((
+                                      String value,
+                                    ) {
+                                      return DropdownMenuItem<String>(
+                                        value: value,
+                                        child: Text(value),
+                                      );
+                                    }).toList(),
                                 onChanged: (String? newValue) {
                                   if (newValue != null) {
                                     setState(() {
@@ -251,18 +392,27 @@ class _ExploreScreenState extends State<ExploreScreen> {
                     Expanded(
                       child: filtered.isEmpty
                           ? _buildEmptyState()
-                          : GridView.builder(
-                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 2,
-                                crossAxisSpacing: 12,
-                                mainAxisSpacing: 12,
-                                childAspectRatio: 0.85,
-                              ),
-                              itemCount: filtered.length,
-                              itemBuilder: (context, index) {
-                                final vendor = filtered[index];
-                                return _buildVendorCard(vendor);
+                          : LayoutBuilder(
+                              builder: (context, constraints) {
+                                final isTablet = constraints.maxWidth >= 600;
+                                return GridView.builder(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 8,
+                                  ),
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: isTablet ? 3 : 2,
+                                        crossAxisSpacing: 12,
+                                        mainAxisSpacing: 12,
+                                        childAspectRatio: 0.85,
+                                      ),
+                                  itemCount: filtered.length,
+                                  itemBuilder: (context, index) {
+                                    final vendor = filtered[index];
+                                    return _buildVendorCard(vendor);
+                                  },
+                                );
                               },
                             ),
                     ),
@@ -277,7 +427,8 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Widget _buildCategoryChip(String label, int count, {String? id}) {
-    final isSelected = (id != null && _selectedCategory.toLowerCase() == id.toLowerCase()) ||
+    final isSelected =
+        (id != null && _selectedCategory.toLowerCase() == id.toLowerCase()) ||
         (id == null && _selectedCategory == 'All');
 
     return Padding(
@@ -296,7 +447,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         onSelected: (selected) {
           if (selected) {
             setState(() {
-              _selectedCategory = id != null ? id : 'All';
+              _selectedCategory = id ?? 'All';
             });
           }
         },
@@ -310,7 +461,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
         : vendor.businessName.toUpperCase();
 
     final categoryMap = AppConstants.categories.firstWhere(
-      (c) => (c['id'] as String).toLowerCase() == (vendor.category ?? 'other').toLowerCase(),
+      (c) =>
+          (c['id'] as String).toLowerCase() ==
+          (vendor.category ?? 'other').toLowerCase(),
       orElse: () => {'name': vendor.category ?? 'Other', 'icon': '📦'},
     );
     final categoryName = categoryMap['name'] as String;
@@ -354,7 +507,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   radius: 24,
                   backgroundColor: _getAvatarColor(vendor.businessName),
                   backgroundImage: vendor.logoUrl.isNotEmpty
-                      ? NetworkImage(vendor.logoUrl)
+                      ? CachedNetworkImageProvider(vendor.logoUrl)
                       : null,
                   child: vendor.logoUrl.isEmpty
                       ? Text(
@@ -368,7 +521,10 @@ class _ExploreScreenState extends State<ExploreScreen> {
                       : null,
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 3,
+                  ),
                   decoration: BoxDecoration(
                     color: AppConstants.surfaceColor,
                     borderRadius: BorderRadius.circular(8),
@@ -412,7 +568,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
                   fontSize: 11,
                   color: AppConstants.textSecondary,
                 ),
-                maxLines: 2,
+                maxLines: 1, // Truncate to 1 line per requirement
                 overflow: TextOverflow.ellipsis,
               ),
             ),
@@ -459,10 +615,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.search_off, size: 64, color: AppConstants.textSecondary),
+              const Icon(
+                Icons.search_off,
+                size: 64,
+                color: AppConstants.textSecondary,
+              ),
               const SizedBox(height: 16),
               Text(
                 'No vendors match "$_searchQuery"',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.syne(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -477,14 +638,18 @@ class _ExploreScreenState extends State<ExploreScreen> {
               const SizedBox(height: 24),
               Wrap(
                 spacing: 8,
-                children: ['Food', 'Services', 'Tutoring'].map((cat) {
+                children: AppConstants.categories
+                    .where((c) => ['food', 'services', 'tutoring'].contains(c['id']))
+                    .map((c) {
+                  final catId = c['id'] as String;
+                  final catName = c['name'] as String;
                   return ActionChip(
-                    label: Text(cat),
+                    label: Text(catName),
                     onPressed: () {
                       _searchController.clear();
                       setState(() {
                         _searchQuery = '';
-                        _selectedCategory = cat;
+                        _selectedCategory = catId;
                       });
                     },
                   );
@@ -501,10 +666,15 @@ class _ExploreScreenState extends State<ExploreScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.storefront, size: 64, color: AppConstants.textSecondary),
+              const Icon(
+                Icons.storefront,
+                size: 64,
+                color: AppConstants.textSecondary,
+              ),
               const SizedBox(height: 16),
               Text(
-                'No vendors in this category yet',
+                'No vendors in this category yet.',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.syne(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -512,7 +682,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Check back soon or explore other categories.',
+                'Try another category or check back later.',
                 textAlign: TextAlign.center,
                 style: GoogleFonts.syne(color: AppConstants.textSecondary),
               ),
@@ -520,14 +690,19 @@ class _ExploreScreenState extends State<ExploreScreen> {
               ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppConstants.primaryColor,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: () {
                   setState(() {
                     _selectedCategory = 'All';
                   });
                 },
-                child: Text('Browse All Categories', style: GoogleFonts.syne(color: Colors.white)),
+                child: Text(
+                  'Browse All Categories',
+                  style: GoogleFonts.syne(color: Colors.white),
+                ),
               ),
             ],
           ),
@@ -546,7 +721,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 12),
             itemCount: 5,
-            itemBuilder: (_, __) => Padding(
+            itemBuilder: (context, index) => Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 10),
               child: Container(
                 width: 90,
@@ -561,72 +736,77 @@ class _ExploreScreenState extends State<ExploreScreen> {
         const SizedBox(height: 16),
         // Skeleton Grid
         Expanded(
-          child: GridView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              childAspectRatio: 0.85,
-            ),
-            itemCount: 6,
-            itemBuilder: (context, index) {
-              return Container(
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppConstants.borderColor),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final isTablet = constraints.maxWidth >= 600;
+              return GridView.builder(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: isTablet ? 3 : 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  childAspectRatio: 0.85,
                 ),
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                itemCount: 6,
+                itemBuilder: (context, index) {
+                  return Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppConstants.borderColor),
+                    ),
+                    padding: const EdgeInsets.all(12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        CircleAvatar(
-                          radius: 24,
-                          backgroundColor: AppConstants.surfaceColor,
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            CircleAvatar(
+                              radius: 24,
+                              backgroundColor: AppConstants.surfaceColor,
+                            ),
+                            Container(
+                              width: 60,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: AppConstants.surfaceColor,
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                            ),
+                          ],
                         ),
+                        const SizedBox(height: 12),
                         Container(
-                          width: 60,
+                          width: 100,
                           height: 16,
                           decoration: BoxDecoration(
                             color: AppConstants.surfaceColor,
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: AppConstants.surfaceColor,
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          width: 120,
+                          height: 12,
+                          decoration: BoxDecoration(
+                            color: AppConstants.surfaceColor,
+                            borderRadius: BorderRadius.circular(3),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    Container(
-                      width: 100,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: AppConstants.surfaceColor,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: AppConstants.surfaceColor,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Container(
-                      width: 120,
-                      height: 12,
-                      decoration: BoxDecoration(
-                        color: AppConstants.surfaceColor,
-                        borderRadius: BorderRadius.circular(3),
-                      ),
-                    ),
-                  ],
-                ),
+                  );
+                },
               );
             },
           ),

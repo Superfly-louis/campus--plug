@@ -1,3 +1,4 @@
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -52,12 +53,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
       body: StreamBuilder<List<ChatModel>>(
         stream: chatService.getUserChats(userId),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(
-              child: CircularProgressIndicator(
-                color: AppConstants.primaryColor,
-              ),
-            );
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return _buildLoadingSkeleton();
           }
 
           if (snapshot.hasError) {
@@ -90,6 +88,46 @@ class _MessagesScreenState extends State<MessagesScreen> {
           );
         },
       ),
+    );
+  }
+
+  Widget _buildLoadingSkeleton() {
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: 6,
+      separatorBuilder: (_, _) => const Divider(
+        height: 1,
+        indent: 76,
+        color: AppConstants.borderColor,
+      ),
+      itemBuilder: (context, index) {
+        return ListTile(
+          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          leading: CircleAvatar(
+            radius: 28,
+            backgroundColor: AppConstants.surfaceColor,
+          ),
+          title: Container(
+            height: 14,
+            width: 120,
+            decoration: BoxDecoration(
+              color: AppConstants.surfaceColor,
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+          subtitle: Padding(
+            padding: const EdgeInsets.only(top: 8),
+            child: Container(
+              height: 12,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: AppConstants.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -155,7 +193,7 @@ class _ChatListTile extends StatelessWidget {
         radius: 28,
         backgroundColor: AppConstants.surfaceColor,
         backgroundImage:
-            otherImage.isNotEmpty ? NetworkImage(otherImage) : null,
+            otherImage.isNotEmpty ? CachedNetworkImageProvider(otherImage) : null,
         child: otherImage.isEmpty
             ? Text(
                 otherName.isNotEmpty ? otherName[0].toUpperCase() : '?',
@@ -214,16 +252,12 @@ class _ChatListTile extends StatelessWidget {
         ],
       ),
       onTap: () {
-        Navigator.push(
+        openExistingChatScreen(
           context,
-          MaterialPageRoute(
-            builder: (_) => ChatScreen(
-              chatId: chat.id,
-              otherUserId: otherId,
-              otherUserName: otherName,
-              otherUserImage: otherImage,
-            ),
-          ),
+          chatId: chat.id,
+          otherUserId: otherId,
+          otherUserName: otherName,
+          otherUserImage: otherImage,
         );
       },
     );

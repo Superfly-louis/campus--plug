@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../core/app_constants.dart';
 import '../models/vendor_model.dart';
 import '../services/firestore_service.dart';
@@ -38,7 +39,7 @@ class VendorShopScreen extends StatelessWidget {
                       radius: 28,
                       backgroundColor: AppConstants.surfaceColor,
                       backgroundImage: vendor?.logoUrl.isNotEmpty == true
-                          ? NetworkImage(vendor!.logoUrl)
+                          ? CachedNetworkImageProvider(vendor!.logoUrl)
                           : null,
                       child: vendor?.logoUrl.isNotEmpty == true
                           ? null

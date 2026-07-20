@@ -23,6 +23,7 @@ VendorModel _$VendorModelFromJson(Map<String, dynamic> json) => VendorModel(
   campusId: json['campusId'] as String,
   responseTimeMinutes: (json['responseTimeMinutes'] as num?)?.toInt(),
   category: json['category'] as String?,
+  completedOrders: (json['completedOrders'] as num?)?.toInt() ?? 0,
   location: const GeoPointConverter().fromJson(json['location']),
   createdAt: const TimestampConverter().fromJson(
     json['createdAt'] as Timestamp,
@@ -45,6 +46,7 @@ Map<String, dynamic> _$VendorModelToJson(VendorModel instance) =>
       'campusId': instance.campusId,
       'responseTimeMinutes': instance.responseTimeMinutes,
       'category': instance.category,
+      'completedOrders': instance.completedOrders,
       'location': const GeoPointConverter().toJson(instance.location),
       'createdAt': const TimestampConverter().toJson(instance.createdAt),
     };

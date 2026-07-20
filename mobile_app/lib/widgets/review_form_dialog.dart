@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/app_constants.dart';
 import '../models/review_model.dart';
 import '../services/firestore_service.dart';
+import '../services/auth_service.dart';
 
 class ReviewFormDialog extends StatefulWidget {
   final String vendorId;
@@ -48,16 +49,17 @@ class _ReviewFormDialogState extends State<ReviewFormDialog> {
 
     setState(() => _submitting = true);
     final firestoreService = Provider.of<FirestoreService>(context, listen: false);
+    final authService = Provider.of<AuthService>(context, listen: false);
 
     try {
-      final reviewId = widget.existingReview?.id ??
-          firestoreService.getVendorsByCampus(AppConstants.defaultCampusId).first.hashCode.toString() +
-              DateTime.now().millisecondsSinceEpoch.toString(); // Generate unique review ID
+      final buyerName = authService.currentUserProfile?.fullName ?? 'Campus User';
 
+      final reviewId = FirestoreService.reviewDocId(widget.vendorId, userId);
       final newReview = ReviewModel(
-        id: widget.existingReview?.id ?? 'rev_${DateTime.now().millisecondsSinceEpoch}_$userId',
+        id: reviewId,
         vendorId: widget.vendorId,
         buyerId: userId,
+        buyerName: buyerName,
         chatId: widget.existingReview?.chatId ?? 'manual_review',
         rating: _rating,
         text: _textController.text.trim().isEmpty ? null : _textController.text.trim(),

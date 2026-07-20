@@ -8,6 +8,7 @@ class ReviewModel {
   final String id;
   final String vendorId;
   final String buyerId;
+  final String? buyerName;
   final String chatId;
   final int rating; // 1 to 5
   final String? text; // optional, max 200 chars
@@ -21,6 +22,7 @@ class ReviewModel {
     required this.id,
     required this.vendorId,
     required this.buyerId,
+    this.buyerName,
     required this.chatId,
     required this.rating,
     this.text,

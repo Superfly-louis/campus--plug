@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campus Plug Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+  <link href="https://unpkg.com/boxicons@2.1.4/css/boxicons.min.css" rel="stylesheet">
+</head>
+<body>
+
+  <!-- Login Overlay -->
+  <div id="login-overlay" class="overlay active">
+    <div class="login-card glass">
+      <div class="logo">
+        <i class='bx bxs-bolt-circle'></i>
+        <h2>Campus Plug Admin</h2>
+      </div>
+      <p>Enter your credentials to access the dashboard</p>
+      <form id="login-form">
+        <div class="input-group">
+          <i class='bx bx-lock-alt'></i>
+          <input type="password" id="admin-password" placeholder="Admin Password" required autocomplete="current-password">
+        </div>
+        <button type="submit" class="btn primary-btn">Login</button>
+      </form>
+      <div id="login-error" class="error-msg hidden">Invalid password.</div>
+    </div>
+  </div>
+
+  <!-- Dashboard App -->
+  <div id="app" class="hidden">
+    
+    <!-- Sidebar -->
+    <aside class="sidebar glass">
+      <div class="sidebar-header">
+        <i class='bx bxs-bolt-circle'></i>
+        <h2>CP Admin</h2>
+      </div>
+      <ul class="nav-links">
+        <li class="active" data-tab="dashboard">
+          <i class='bx bx-grid-alt'></i>
+          <span>Dashboard</span>
+        </li>
+        <li data-tab="vendors">
+          <i class='bx bx-store-alt'></i>
+          <span>Vendors</span>
+        </li>
+      </ul>
+      <div class="sidebar-footer">
+        <button id="logout-btn" class="btn ghost-btn">
+          <i class='bx bx-log-out'></i>
+          <span>Logout</span>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <header class="topbar">
+        <div class="search-wrapper glass-input">
+          <i class='bx bx-search'></i>
+          <input type="text" id="global-search" placeholder="Search vendors or chats...">
+        </div>
+        <div class="user-profile">
+          <img src="https://ui-avatars.com/api/?name=Admin&background=10b981&color=fff" alt="Admin Avatar" class="avatar">
+          <span>Admin</span>
+        </div>
+      </header>
+
+      <!-- Dashboard View -->
+      <section id="view-dashboard" class="view active">
+        <div class="header-title">
+          <h1>Overview Analytics</h1>
+          <p>Real-time data from your marketplace</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card glass hoverable">
+            <div class="stat-icon vendors-icon">
+              <i class='bx bx-store'></i>
+            </div>
+            <div class="stat-details">
+              <h3>Total Vendors</h3>
+              <h2 id="stat-total-vendors">-</h2>
+            </div>
+          </div>
+          <div class="stat-card glass hoverable">
+            <div class="stat-icon chats-icon">
+              <i class='bx bx-message-square-dots'></i>
+            </div>
+            <div class="stat-details">
+              <h3>Active Chats</h3>
+              <h2 id="stat-active-chats">-</h2>
+            </div>
+          </div>
+          <div class="stat-card glass hoverable">
+            <div class="stat-icon activity-icon">
+              <i class='bx bx-pulse'></i>
+            </div>
+            <div class="stat-details">
+              <h3>Recent Activity (24h)</h3>
+              <h2 id="stat-recent-activity">-</h2>
+            </div>
+          </div>
+        </div>
+
+        <div class="header-title mt-2">
+          <h2>Recent Chats (Last 24h)</h2>
+        </div>
+        
+        <div class="table-container glass">
+          <table id="recent-chats-table">
+            <thead>
+              <tr>
+                <th>Vendor</th>
+                <th>Buyer</th>
+                <th>Subject</th>
+                <th>Last Message</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="chats-tbody">
+              <!-- Rendered via JS -->
+            </tbody>
+          </table>
+          <div id="chats-loading" class="loading-spinner"></div>
+        </div>
+      </section>
+
+      <!-- Vendors View -->
+      <section id="view-vendors" class="view hidden">
+        <div class="header-title flex-between">
+          <div>
+            <h1>Vendor Management</h1>
+            <p>Verify and manage registered vendors</p>
+          </div>
+          <div class="actions">
+            <select id="vendor-sort" class="glass-select">
+              <option value="newest">Newest First</option>
+              <option value="rating">Highest Rating</option>
+              <option value="name">Name A-Z</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container glass">
+          <table id="vendors-table">
+            <thead>
+              <tr>
+                <th>Vendor</th>
+                <th>Category</th>
+                <th>Rating</th>
+                <th>Joined</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="vendors-tbody">
+               <!-- Rendered via JS -->
+            </tbody>
+          </table>
+          <div id="vendors-loading" class="loading-spinner"></div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

@@ -13,6 +13,7 @@ import 'product_detail_screen.dart';
 import 'vendor_shop_screen.dart';
 import 'explore_screen.dart';
 import 'vendor_profile_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialTab = 0});
@@ -26,11 +27,13 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   String _selectedCategory = 'Food';
   late int _currentIndex;
+  bool _messagesTabVisited = false;
 
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialTab;
+    if (_currentIndex == 3) _messagesTabVisited = true;
   }
 
   @override
@@ -52,13 +55,18 @@ class _HomeScreenState extends State<HomeScreen> {
           profile?.isVendor == true && vendorId != null && vendorId.isNotEmpty
               ? VendorShopScreen(vendorId: vendorId)
               : _buildPlaceholderTab('Shop', Icons.storefront),
-          const MessagesScreen(),
+          _messagesTabVisited
+              ? const MessagesScreen()
+              : const SizedBox.shrink(),
           _buildPlaceholderTab('Profile', Icons.person_outline),
         ],
       ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) => setState(() => _currentIndex = index),
+        onTap: (index) => setState(() {
+          _currentIndex = index;
+          if (index == 3) _messagesTabVisited = true;
+        }),
         selectedItemColor: AppConstants.primaryColor,
         unselectedItemColor: AppConstants.textSecondary,
         showUnselectedLabels: true,
@@ -320,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: AppConstants.surfaceColor,
-                        backgroundImage: vendor.logoUrl.isNotEmpty ? NetworkImage(vendor.logoUrl) : null,
+                        backgroundImage: vendor.logoUrl.isNotEmpty ? CachedNetworkImageProvider(vendor.logoUrl) : null,
                         child: vendor.logoUrl.isEmpty ? Text(vendor.businessName[0].toUpperCase()) : null,
                       ),
                       const SizedBox(height: 8),

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/product_model.dart';
 import 'package:intl/intl.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ProductCard extends StatelessWidget {
   final ProductModel product;
@@ -41,10 +42,10 @@ class ProductCard extends StatelessWidget {
                   child: AspectRatio(
                     aspectRatio: 1,
                     child: product.imageUrls.isNotEmpty
-                        ? Image.network(
-                            product.imageUrls[0],
+                        ? CachedNetworkImage(
+                            imageUrl: product.imageUrls[0],
                             fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) => Container(
+                            errorWidget: (context, url, error) => Container(
                               color: Colors.grey[200],
                               child: const Icon(Icons.image_not_supported, color: Colors.grey),
                             ),

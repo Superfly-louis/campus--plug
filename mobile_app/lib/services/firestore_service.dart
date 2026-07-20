@@ -205,28 +205,43 @@ class FirestoreService {
         });
   }
 
-  Stream<List<VendorModel>> getAllVendors() {
-    return _db
+  Future<List<VendorModel>> fetchVendorsByCampusFuture(String campusId) async {
+    final snapshot = await _db
         .collection(AppConstants.vendorsCollection)
-        .snapshots()
-        .map((snapshot) {
-          final vendors = <VendorModel>[];
-          for (final doc in snapshot.docs) {
-            try {
-              vendors.add(VendorModel.fromJson(doc.data()));
-            } catch (_) {
-              // Skip legacy/incomplete documents
-            }
-          }
-          return vendors;
-        });
+        .where('campusId', isEqualTo: campusId)
+        .get();
+
+    final vendors = <VendorModel>[];
+    for (final doc in snapshot.docs) {
+      try {
+        vendors.add(VendorModel.fromJson(doc.data()));
+      } catch (_) {
+        // Skip legacy/incomplete documents
+      }
+    }
+    return vendors;
+  }
+
+  Stream<List<VendorModel>> getAllVendors() {
+    return _db.collection(AppConstants.vendorsCollection).snapshots().map((
+      snapshot,
+    ) {
+      final vendors = <VendorModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          vendors.add(VendorModel.fromJson(doc.data()));
+        } catch (_) {
+          // Skip legacy/incomplete documents
+        }
+      }
+      return vendors;
+    });
   }
 
   Future<void> verifyVendor(String vendorId, bool isVerified) async {
-    await _db
-        .collection(AppConstants.vendorsCollection)
-        .doc(vendorId)
-        .update({'isVerified': isVerified});
+    await _db.collection(AppConstants.vendorsCollection).doc(vendorId).update({
+      'isVerified': isVerified,
+    });
   }
 
   Stream<List<ReviewModel>> getVendorReviews(String vendorId) {
@@ -243,11 +258,18 @@ class FirestoreService {
         });
   }
 
+  /// One review per buyer per vendor; document id is deterministic for upsert.
+  static String reviewDocId(String vendorId, String buyerId) =>
+      '${vendorId}_$buyerId';
+
   Future<void> createReview(ReviewModel review) async {
-    final batch = _db.batch();
-    final reviewRef = _db.collection(AppConstants.reviewsCollection).doc(review.id);
-    batch.set(reviewRef, review.toJson());
-    await batch.commit();
+    final reviewId = reviewDocId(review.vendorId, review.buyerId);
+    final reviewRef = _db
+        .collection(AppConstants.reviewsCollection)
+        .doc(reviewId);
+    final data = review.toJson();
+    data['id'] = reviewId;
+    await reviewRef.set(data, SetOptions(merge: true));
 
     await updateVendorRating(review.vendorId);
   }

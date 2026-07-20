@@ -9,6 +9,7 @@ import '../services/auth_service.dart';
 import '../services/storage_service.dart';
 import '../core/auth_errors.dart';
 import 'add_product_screen.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 
 class ShopCreateScreen extends StatefulWidget {
   const ShopCreateScreen({super.key});
@@ -180,9 +181,12 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
   }
 
   Future<void> _handleNext() async {
-    if (_shopNameController.text.trim().isEmpty || _selectedCategory == null) {
+    if (_shopNameController.text.trim().isEmpty || 
+        _selectedCategory == null ||
+        _descriptionController.text.trim().isEmpty ||
+        _profileImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
+        const SnackBar(content: Text('Please provide a shop name, category, description, and profile photo')),
       );
       return;
     }
@@ -248,7 +252,8 @@ class _ShopCreateScreenState extends State<ShopCreateScreen> {
           MaterialPageRoute(builder: (_) => const AddProductScreen()),
         );
       }
-    } catch (e) {
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'Failed to create shop');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(friendlyAuthError(e))),

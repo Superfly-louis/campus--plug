@@ -8,6 +8,8 @@ import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../widgets/chat_bubble.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class ChatScreen extends StatefulWidget {
   final String chatId;
@@ -31,6 +33,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _sending = false;
+  int _lastMessageCount = 0;
 
   String? get _userId => FirebaseAuth.instance.currentUser?.uid;
 
@@ -91,7 +94,8 @@ class _ChatScreenState extends State<ChatScreen> {
       );
       _messageController.clear();
       _scrollToBottom();
-    } catch (e) {
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'Failed to send chat message');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send message: $e')),
@@ -113,13 +117,15 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
-    return StreamBuilder<ChatModel>(
+    return StreamBuilder<ChatModel?>(
       stream: chatService.watchChat(widget.chatId),
       builder: (context, chatSnapshot) {
         final chat = chatSnapshot.data;
         final isClosed = chat?.status == 'closed';
-        final isIBlocked = chat?.blocked != null && chat!.blocked![userId] == true;
-        final isOtherBlocked = chat?.blocked != null && chat!.blocked![widget.otherUserId] == true;
+        final isIBlocked =
+            chat?.blocked != null && chat!.blocked![userId] == true;
+        final isOtherBlocked = chat?.blocked != null &&
+            chat!.blocked![widget.otherUserId] == true;
         final isDisabled = isClosed || isIBlocked || isOtherBlocked;
 
         return Scaffold(
@@ -139,7 +145,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       radius: 20,
                       backgroundColor: AppConstants.surfaceColor,
                       backgroundImage: widget.otherUserImage.isNotEmpty
-                          ? NetworkImage(widget.otherUserImage)
+                          ? CachedNetworkImageProvider(widget.otherUserImage)
                           : null,
                       child: widget.otherUserImage.isEmpty
                           ? Text(
@@ -227,10 +233,12 @@ class _ChatScreenState extends State<ChatScreen> {
           body: StreamBuilder<List<MessageModel>>(
             stream: chatService.getMessages(widget.chatId),
             builder: (context, snapshot) {
-              final isOffline = false; // snapshot.metadata.isFromCache not available on AsyncSnapshot
               final messages = snapshot.data ?? [];
+              final hasPendingMessages = messages.any((m) => m.isPending);
+              final isOffline = hasPendingMessages; // We assume offline if we have pending messages, for the sake of the banner
 
-              if (snapshot.connectionState == ConnectionState.waiting && messages.isEmpty) {
+              if (snapshot.connectionState == ConnectionState.waiting &&
+                  messages.isEmpty) {
                 return const Center(
                   child: CircularProgressIndicator(
                     color: AppConstants.primaryColor,
@@ -238,8 +246,11 @@ class _ChatScreenState extends State<ChatScreen> {
                 );
               }
 
-              if (messages.isNotEmpty) {
-                _scrollToBottom();
+              if (messages.length != _lastMessageCount) {
+                _lastMessageCount = messages.length;
+                if (messages.isNotEmpty) {
+                  _scrollToBottom();
+                }
               }
 
               return Column(
@@ -275,7 +286,7 @@ class _ChatScreenState extends State<ChatScreen> {
                               final message = messages[index];
                               final isMyMessage = message.senderId == userId;
                               // Determine if message is pending sync (local queue)
-                              final isPending = isMyMessage && !message.isRead && isOffline;
+                              final isPending = isMyMessage && message.isPending;
                               return ChatBubble(
                                 message: message,
                                 isMe: isMyMessage,
@@ -343,6 +354,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 controller: _messageController,
                 textCapitalization: TextCapitalization.sentences,
                 enabled: !isDisabled,
+                maxLength: 1000,
+                minLines: 1,
+                maxLines: 5,
                 decoration: InputDecoration(
                   hintText: isDisabled ? 'Chat is disabled' : 'Type a message...',
                   filled: true,
@@ -355,6 +369,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     horizontal: 18,
                     vertical: 12,
                   ),
+                  counterText: '', // Hide the counter to save space
                 ),
                 onSubmitted: (_) => isDisabled ? null : _sendMessage(),
               ),
@@ -386,4 +401,195 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+}
+
+class ChatBootstrapScreen extends StatelessWidget {
+  final Future<ChatLaunchResult> chatFuture;
+  final String previewName;
+  final String previewImage;
+
+  const ChatBootstrapScreen({
+    super.key,
+    required this.chatFuture,
+    this.previewName = 'Loading chat...',
+    this.previewImage = '',
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<ChatLaunchResult>(
+      future: chatFuture,
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          final result = snapshot.data!;
+          return ChatScreen(
+            chatId: result.chatId,
+            otherUserId: result.otherUserId,
+            otherUserName: result.otherUserName,
+            otherUserImage: result.otherUserImage,
+          );
+        }
+
+        if (snapshot.hasError) {
+          return Scaffold(
+            backgroundColor: AppConstants.backgroundColor,
+            appBar: AppBar(
+              backgroundColor: AppConstants.backgroundColor,
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: AppConstants.textPrimary,
+                ),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: Text(
+                previewName,
+                style: const TextStyle(color: AppConstants.textPrimary),
+              ),
+            ),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not open chat. Please try again.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: AppConstants.textSecondary),
+                ),
+              ),
+            ),
+          );
+        }
+
+        return _ChatLoadingShell(
+          otherUserName: previewName,
+          otherUserImage: previewImage,
+        );
+      },
+    );
+  }
+}
+
+class ChatLaunchResult {
+  final String chatId;
+  final String otherUserId;
+  final String otherUserName;
+  final String otherUserImage;
+
+  const ChatLaunchResult({
+    required this.chatId,
+    required this.otherUserId,
+    required this.otherUserName,
+    required this.otherUserImage,
+  });
+}
+
+class _ChatLoadingShell extends StatelessWidget {
+  final String otherUserName;
+  final String otherUserImage;
+
+  const _ChatLoadingShell({
+    required this.otherUserName,
+    required this.otherUserImage,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: AppConstants.backgroundColor,
+      appBar: AppBar(
+        backgroundColor: AppConstants.backgroundColor,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: AppConstants.textPrimary),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: AppConstants.surfaceColor,
+              backgroundImage: otherUserImage.isNotEmpty
+                  ? CachedNetworkImageProvider(otherUserImage)
+                  : null,
+              child: otherUserImage.isEmpty
+                  ? Text(
+                      otherUserName.isNotEmpty
+                          ? otherUserName[0].toUpperCase()
+                          : '?',
+                      style: const TextStyle(
+                        color: AppConstants.primaryColor,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                otherUserName,
+                style: const TextStyle(
+                  color: AppConstants.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+      body: const Center(
+        child: CircularProgressIndicator(color: AppConstants.primaryColor),
+      ),
+    );
+  }
+}
+
+void openChatScreen(
+  BuildContext context, {
+  required Future<ChatLaunchResult> chatFuture,
+  String previewName = 'Loading chat...',
+  String previewImage = '',
+}) {
+  Navigator.push(
+    context,
+    PageRouteBuilder(
+      opaque: true,
+      pageBuilder: (_, __, ___) => ChatBootstrapScreen(
+        chatFuture: chatFuture,
+        previewName: previewName,
+        previewImage: previewImage,
+      ),
+      transitionsBuilder: (_, animation, __, child) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      transitionDuration: const Duration(milliseconds: 200),
+    ),
+  );
+}
+
+void openExistingChatScreen(
+  BuildContext context, {
+  required String chatId,
+  required String otherUserId,
+  required String otherUserName,
+  required String otherUserImage,
+}) {
+  Navigator.push(
+    context,
+    PageRouteBuilder(
+      opaque: true,
+      pageBuilder: (_, __, ___) => ChatScreen(
+        chatId: chatId,
+        otherUserId: otherUserId,
+        otherUserName: otherUserName,
+        otherUserImage: otherUserImage,
+      ),
+      transitionsBuilder: (_, animation, __, child) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      transitionDuration: const Duration(milliseconds: 200),
+    ),
+  );
 }

@@ -5,13 +5,14 @@ import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../core/app_constants.dart';
 import '../models/review_model.dart';
-import '../models/user_model.dart';
 import '../models/vendor_model.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
+import '../models/user_model.dart';
 import '../widgets/review_form_dialog.dart';
 import 'chat_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class VendorProfileScreen extends StatefulWidget {
   final String vendorId;
@@ -24,7 +25,6 @@ class VendorProfileScreen extends StatefulWidget {
 
 class _VendorProfileScreenState extends State<VendorProfileScreen> {
   bool _isDescriptionExpanded = false;
-  bool _chatLoading = false;
 
   Color _getAvatarColor(String name) {
     final int hash = name.codeUnits.fold(0, (prev, element) => prev + element);
@@ -39,7 +39,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     return colors[hash % colors.length];
   }
 
-  Future<void> _chatWithVendor(VendorModel vendor) async {
+  void _chatWithVendor(VendorModel vendor) {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       _showSnackbar('Please sign in to message this vendor');
@@ -51,54 +51,32 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
       return;
     }
 
-    setState(() => _chatLoading = true);
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final chatService = Provider.of<ChatService>(context, listen: false);
+    final profile = authService.currentUserProfile;
 
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final firestoreService = Provider.of<FirestoreService>(context, listen: false);
-      final chatService = Provider.of<ChatService>(context, listen: false);
-
-      UserModel? currentProfile = authService.currentUserProfile;
-      currentProfile ??= await firestoreService.getUserProfile(currentUser.uid);
-
-      if (currentProfile == null) {
-        _showSnackbar('Could not load your profile');
-        return;
-      }
-
-      UserModel? sellerProfile = await firestoreService.getUserProfile(vendor.ownerId);
-      final sellerName = sellerProfile?.fullName ?? vendor.businessName;
-      final sellerImage = sellerProfile?.profileImageUrl ?? '';
-
-      final chatId = await chatService.getOrCreateChat(
+    openChatScreen(
+      context,
+      previewName: vendor.businessName,
+      previewImage: vendor.logoUrl,
+      chatFuture: chatService.getOrCreateChat(
         currentUserId: currentUser.uid,
         otherUserId: vendor.ownerId,
-        otherUserName: sellerName,
-        otherUserImage: sellerImage,
-        currentUserName: currentProfile.fullName,
-        currentUserImage: currentProfile.profileImageUrl,
+        otherUserName: vendor.businessName,
+        otherUserImage: vendor.logoUrl,
+        currentUserName: profile?.fullName ?? 'Campus User',
+        currentUserImage: profile?.profileImageUrl ?? '',
         vendorId: vendor.id,
         subject: 'Inquiry with ${vendor.businessName}',
-      );
-
-      if (!mounted) return;
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatScreen(
-            chatId: chatId,
-            otherUserId: vendor.ownerId,
-            otherUserName: sellerName,
-            otherUserImage: sellerImage,
-          ),
+      ).then(
+        (chatId) => ChatLaunchResult(
+          chatId: chatId,
+          otherUserId: vendor.ownerId,
+          otherUserName: vendor.businessName,
+          otherUserImage: vendor.logoUrl,
         ),
-      );
-    } catch (e) {
-      _showSnackbar('Could not start chat: $e');
-    } finally {
-      if (mounted) setState(() => _chatLoading = false);
-    }
+      ),
+    );
   }
 
   void _showSnackbar(String msg) {
@@ -227,7 +205,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             stream: firestoreService.getVendorReviews(vendor.id),
             builder: (context, reviewsSnapshot) {
               final reviews = reviewsSnapshot.data ?? [];
-              final recentReviews = reviews.take(3).toList();
+              final recentReviews = reviews.take(5).toList();
               final currentUser = FirebaseAuth.instance.currentUser;
               final existingIndex = currentUser != null ? reviews.indexWhere((r) => r.buyerId == currentUser.uid) : -1;
 
@@ -246,7 +224,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                             radius: 36,
                             backgroundColor: _getAvatarColor(vendor.businessName),
                             backgroundImage: vendor.logoUrl.isNotEmpty
-                                ? NetworkImage(vendor.logoUrl)
+                                ? CachedNetworkImageProvider(vendor.logoUrl)
                                 : null,
                             child: vendor.logoUrl.isEmpty
                                 ? Text(
@@ -288,28 +266,14 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                                   ],
                                 ),
                                 const SizedBox(height: 6),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.star_rounded, color: Colors.amber, size: 18),
-                                    const SizedBox(width: 4),
                                     Text(
-                                      vendor.ratingAverage.toStringAsFixed(1),
+                                      '⭐ ${vendor.ratingAverage.toStringAsFixed(1)} (${vendor.ratingCount} reviews)',
                                       style: GoogleFonts.syne(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
                                         color: AppConstants.textPrimary,
                                       ),
                                     ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '(${vendor.ratingCount} reviews)',
-                                      style: GoogleFonts.syne(
-                                        fontSize: 13,
-                                        color: AppConstants.textSecondary,
-                                      ),
-                                    ),
-                                  ],
-                                ),
                                 const SizedBox(height: 8),
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -373,7 +337,6 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         ),
                       ),
 
-                    // Response Time Badge
                     if (vendor.responseTimeMinutes != null)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -382,6 +345,48 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                           child: _buildResponseTimeBadge(vendor.responseTimeMinutes!),
                         ),
                       ),
+                      
+                    // Inactive Vendor Badge
+                    FutureBuilder<UserModel?>(
+                      future: firestoreService.getUserProfile(vendor.ownerId),
+                      builder: (context, userSnapshot) {
+                        if (!userSnapshot.hasData || userSnapshot.data == null) return const SizedBox.shrink();
+                        final user = userSnapshot.data!;
+                        final now = DateTime.now();
+                        final diff = now.difference(user.lastActive).inDays;
+                        if (diff >= 14) {
+                          return Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                            child: Align(
+                              alignment: Alignment.centerLeft,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[200],
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.history, color: Colors.grey, size: 16),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'Last active 2 weeks ago',
+                                      style: GoogleFonts.syne(
+                                        color: Colors.grey[700],
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
 
                     const Divider(height: 32, thickness: 1, color: AppConstants.borderColor),
 
@@ -417,7 +422,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                         child: Text(
-                          'No reviews yet. Be the first to leave a review.',
+                          'No reviews yet - Be the first to leave one',
                           style: GoogleFonts.syne(
                             color: AppConstants.textSecondary,
                             fontStyle: FontStyle.italic,
@@ -432,7 +437,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                         itemCount: recentReviews.length,
                         itemBuilder: (context, index) {
                           final review = recentReviews[index];
-                          return _buildReviewTile(review);
+                          return ReviewTile(review: review);
                         },
                       ),
                       if (reviews.length > 5)
@@ -491,26 +496,20 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _chatLoading ? null : () => _chatWithVendor(vendor),
+                    onPressed: () => _chatWithVendor(vendor),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppConstants.primaryColor,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: _chatLoading
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                          )
-                        : Text(
-                            'Message Vendor',
-                            style: GoogleFonts.syne(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
+                    child: Text(
+                      'Message Vendor',
+                      style: GoogleFonts.syne(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -572,15 +571,35 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
     return const SizedBox.shrink();
   }
 
-  Widget _buildReviewTile(ReviewModel review) {
-    final buyerInitials = review.buyerId.length >= 2
-        ? review.buyerId.substring(0, 2).toUpperCase()
-        : 'BY';
+  int min(int a, int b) => a < b ? a : b;
+}
 
-    // Mock anonymized buyer name lookup - in practice we'd fetch profile or hardcode
-    // Let's create an anonymized name like "Alex M."
-    final anonymizedName = 'Buyer ${review.buyerId.substring(0, min(3, review.buyerId.length)).toUpperCase()}';
+class ReviewTile extends StatefulWidget {
+  final ReviewModel review;
 
+  const ReviewTile({super.key, required this.review});
+
+  @override
+  State<ReviewTile> createState() => _ReviewTileState();
+}
+
+class _ReviewTileState extends State<ReviewTile> {
+  bool _isExpanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final String fullName = widget.review.buyerName ?? 'Campus User';
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    String anonymizedName = fullName;
+    if (parts.length > 1 && parts[1].isNotEmpty) {
+      anonymizedName = '${parts[0]} ${parts[1][0]}.';
+    } else if (parts.isNotEmpty) {
+      anonymizedName = parts[0];
+    }
+
+    final reviewText = widget.review.text;
+    final bool hasLongText = reviewText != null && reviewText.length > 100;
+    
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.all(12),
@@ -599,7 +618,7 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
                 style: GoogleFonts.syne(fontWeight: FontWeight.bold, fontSize: 13),
               ),
               Text(
-                DateFormat('MMM d, yyyy').format(review.createdAt),
+                DateFormat('MMM d, yyyy').format(widget.review.createdAt),
                 style: GoogleFonts.syne(fontSize: 11, color: AppConstants.textSecondary),
               ),
             ],
@@ -608,20 +627,39 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           Row(
             children: List.generate(5, (index) {
               return Icon(
-                index < review.rating ? Icons.star_rounded : Icons.star_outline_rounded,
+                index < widget.review.rating ? Icons.star_rounded : Icons.star_outline_rounded,
                 color: Colors.amber,
                 size: 16,
               );
             }),
           ),
-          if (review.text != null && review.text!.isNotEmpty) ...[
+          if (reviewText != null && reviewText.isNotEmpty) ...[
             const SizedBox(height: 6),
             Text(
-              review.text!,
+              hasLongText && !_isExpanded 
+                  ? '${reviewText.substring(0, 100)}...' 
+                  : reviewText,
               style: GoogleFonts.syne(fontSize: 13, color: AppConstants.textPrimary),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
+            if (hasLongText)
+              GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isExpanded = !_isExpanded;
+                  });
+                },
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 4),
+                  child: Text(
+                    _isExpanded ? 'Read less' : 'Read more',
+                    style: GoogleFonts.syne(
+                      color: AppConstants.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ),
           ],
         ],
       ),

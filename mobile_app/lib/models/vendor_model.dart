@@ -19,10 +19,13 @@ class VendorModel {
   final String campusId;
   final int? responseTimeMinutes;
   final String? category;
-  
+
+  @JsonKey(defaultValue: 0)
+  final int completedOrders;
+
   @GeoPointConverter()
   final GeoPoint? location;
-  
+
   @TimestampConverter()
   final DateTime createdAt;
 
@@ -41,13 +44,16 @@ class VendorModel {
     required this.campusId,
     this.responseTimeMinutes,
     this.category,
+    this.completedOrders = 0,
     this.location,
     required this.createdAt,
   });
 
   factory VendorModel.fromJson(Map<String, dynamic> json) {
     // Inject category fallback from categories if category is missing
-    if (json['category'] == null && json['categories'] is List && (json['categories'] as List).isNotEmpty) {
+    if (json['category'] == null &&
+        json['categories'] is List &&
+        (json['categories'] as List).isNotEmpty) {
       json['category'] = (json['categories'] as List)[0];
     }
     // Inject campusId fallback from campusId or campus
@@ -64,9 +70,9 @@ class GeoPointConverter implements JsonConverter<GeoPoint?, dynamic> {
 
   @override
   GeoPoint? fromJson(dynamic geo) {
-     if (geo is GeoPoint) return geo;
-     if (geo is Map) return GeoPoint(geo['latitude'], geo['longitude']);
-     return null;
+    if (geo is GeoPoint) return geo;
+    if (geo is Map) return GeoPoint(geo['latitude'], geo['longitude']);
+    return null;
   }
 
   @override
@@ -82,4 +88,3 @@ class TimestampConverter implements JsonConverter<DateTime, Timestamp> {
   @override
   Timestamp toJson(DateTime date) => Timestamp.fromDate(date);
 }
-

@@ -23,79 +23,70 @@ class ProductDetailScreen extends StatefulWidget {
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  bool _chatLoading = false;
-
   ProductModel get product => widget.product;
 
-  Future<void> _chatWithSeller() async {
+  Future<ChatLaunchResult> _resolveChat(String currentUserId) async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final firestoreService =
+        Provider.of<FirestoreService>(context, listen: false);
+    final chatService = Provider.of<ChatService>(context, listen: false);
+
+    UserModel? currentProfile = authService.currentUserProfile;
+    currentProfile ??= await firestoreService.getUserProfile(currentUserId);
+
+    if (currentProfile == null) {
+      throw StateError('Could not load your profile');
+    }
+
+    final sellerId = await firestoreService.getVendorOwnerId(product.vendorId);
+    if (sellerId == null) {
+      throw StateError('Seller not found');
+    }
+
+    if (sellerId == currentUserId) {
+      throw StateError('You cannot message yourself');
+    }
+
+    final sellerProfile = await firestoreService.getUserProfile(sellerId);
+    final sellerName = sellerProfile?.fullName ?? product.vendorName;
+    final sellerImage = sellerProfile?.profileImageUrl ?? '';
+
+    final chatId = await chatService.getOrCreateChat(
+      currentUserId: currentUserId,
+      otherUserId: sellerId,
+      otherUserName: sellerName,
+      otherUserImage: sellerImage,
+      currentUserName: currentProfile.fullName,
+      currentUserImage: currentProfile.profileImageUrl,
+      vendorId: product.vendorId,
+      subject: '${product.name} Order',
+    );
+
+    return ChatLaunchResult(
+      chatId: chatId,
+      otherUserId: sellerId,
+      otherUserName: sellerName,
+      otherUserImage: sellerImage,
+    );
+  }
+
+  void _chatWithSeller() {
     final currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser == null) {
       _showError('Please sign in to message sellers');
       return;
     }
 
-    setState(() => _chatLoading = true);
-
-    try {
-      final authService = Provider.of<AuthService>(context, listen: false);
-      final firestoreService =
-          Provider.of<FirestoreService>(context, listen: false);
-      final chatService = Provider.of<ChatService>(context, listen: false);
-
-      UserModel? currentProfile = authService.currentUserProfile;
-      currentProfile ??=
-          await firestoreService.getUserProfile(currentUser.uid);
-
-      if (currentProfile == null) {
-        _showError('Could not load your profile');
-        return;
-      }
-
-      final sellerId =
-          await firestoreService.getVendorOwnerId(product.vendorId);
-      if (sellerId == null) {
-        _showError('Seller not found');
-        return;
-      }
-
-      if (sellerId == currentUser.uid) {
-        _showError('You cannot message yourself');
-        return;
-      }
-
-      UserModel? sellerProfile = await firestoreService.getUserProfile(sellerId);
-      final sellerName = sellerProfile?.fullName ?? product.vendorName;
-      final sellerImage = sellerProfile?.profileImageUrl ?? '';
-
-      final chatId = await chatService.getOrCreateChat(
-        currentUserId: currentUser.uid,
-        otherUserId: sellerId,
-        otherUserName: sellerName,
-        otherUserImage: sellerImage,
-        currentUserName: currentProfile.fullName,
-        currentUserImage: currentProfile.profileImageUrl,
-        vendorId: product.vendorId,
-        subject: '${product.name} Order',
-      );
-
-      if (!mounted) return;
-
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatScreen(
-            chatId: chatId,
-            otherUserId: sellerId,
-            otherUserName: sellerName,
-            otherUserImage: sellerImage,
-          ),
-        ),
-      );
-    } catch (e) {
-      _showError('Could not start chat: $e');
-    } finally {
-      if (mounted) setState(() => _chatLoading = false);
-    }
+    openChatScreen(
+      context,
+      previewName: product.vendorName,
+      chatFuture: _resolveChat(currentUser.uid).catchError((error) {
+        _showError(
+          error is StateError ? error.message : 'Could not start chat: $error',
+        );
+        throw error;
+      }),
+    );
   }
 
   void _showError(String message) {
@@ -291,17 +282,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             Expanded(
               flex: 2,
               child: ElevatedButton.icon(
-                onPressed: _chatLoading ? null : _chatWithSeller,
-                icon: _chatLoading
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: AppConstants.textPrimary,
-                        ),
-                      )
-                    : const Icon(Icons.chat_bubble_outline),
+                onPressed: _chatWithSeller,
+                icon: const Icon(Icons.chat_bubble_outline),
                 label: const Text('Chat with Seller'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppConstants.surfaceColor,

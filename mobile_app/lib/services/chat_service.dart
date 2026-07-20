@@ -6,6 +6,11 @@ import '../models/message_model.dart';
 class ChatService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
 
+  static String buildChatDocId(String userIdA, String userIdB) {
+    final ids = [userIdA, userIdB]..sort();
+    return '${ids[0]}_${ids[1]}';
+  }
+
   Stream<List<ChatModel>> getUserChats(String userId) {
     return _db
         .collection(AppConstants.chatsCollection)
@@ -38,31 +43,30 @@ class ChatService {
     required String vendorId,
     required String subject,
   }) async {
-    final existing = await _db
-        .collection(AppConstants.chatsCollection)
-        .where('participants', arrayContains: currentUserId)
-        .get();
+    final chatDocId = ChatService.buildChatDocId(currentUserId, otherUserId);
+    final docRef = _db.collection(AppConstants.chatsCollection).doc(chatDocId);
+    final existingDoc = await docRef.get();
 
-    for (final doc in existing.docs) {
-      final participants = List<String>.from(doc['participants'] ?? []);
-      if (participants.contains(otherUserId) && participants.length == 2) {
-        // Return existing chat but update vendorId/subject/status if missing
-        final data = doc.data();
-        if (data['vendorId'] == null || data['status'] == null) {
-          await doc.reference.update({
-            'vendorId': vendorId,
-            'buyerId': currentUserId,
-            'subject': subject,
-            'status': data['status'] ?? 'active',
-          });
-        }
-        return doc.id;
+    if (existingDoc.exists) {
+      final data = existingDoc.data() ?? {};
+      if (data['vendorId'] == null || data['status'] == null) {
+        await docRef.update({
+          'vendorId': vendorId,
+          'buyerId': currentUserId,
+          'subject': subject,
+          'status': data['status'] ?? 'active',
+        });
       }
+      return chatDocId;
     }
 
-    final docRef = _db.collection(AppConstants.chatsCollection).doc();
+    final legacyChatId = await _findLegacyChatId(currentUserId, otherUserId);
+    if (legacyChatId != null) {
+      return legacyChatId;
+    }
+
     await docRef.set({
-      'id': docRef.id,
+      'id': chatDocId,
       'participants': [currentUserId, otherUserId],
       'participantNames': {
         currentUserId: currentUserName,
@@ -87,7 +91,25 @@ class ChatService {
       'blocked': <String, bool>{},
     });
 
-    return docRef.id;
+    return chatDocId;
+  }
+
+  Future<String?> _findLegacyChatId(
+    String currentUserId,
+    String otherUserId,
+  ) async {
+    final existing = await _db
+        .collection(AppConstants.chatsCollection)
+        .where('participants', arrayContains: currentUserId)
+        .get();
+
+    for (final doc in existing.docs) {
+      final participants = List<String>.from(doc['participants'] ?? []);
+      if (participants.contains(otherUserId) && participants.length == 2) {
+        return doc.id;
+      }
+    }
+    return null;
   }
 
   Stream<List<MessageModel>> getMessages(String chatId) {
@@ -156,13 +178,17 @@ class ChatService {
       'readAt': null,
     });
 
+    final lastMessagePreview = trimmed.length > 50 ? '${trimmed.substring(0, 47)}...' : trimmed;
+
     batch.update(chatRef, {
-      'lastMessage': trimmed,
+      'lastMessage': lastMessagePreview,
       'lastMessageTime': FieldValue.serverTimestamp(),
       'lastMessageSenderId': senderId,
       'unreadCount': unreadCount,
     });
 
+    // Await commit so callers can surface failures; Firestore offline persistence
+    // still queues writes locally when the device has no connectivity.
     await batch.commit();
     // TODO: Send push notification to recipient via FCM deviceToken
   }
@@ -205,11 +231,14 @@ class ChatService {
     });
   }
 
-  Stream<ChatModel> watchChat(String chatId) {
+  Stream<ChatModel?> watchChat(String chatId) {
     return _db
         .collection(AppConstants.chatsCollection)
         .doc(chatId)
         .snapshots()
-        .map((doc) => ChatModel.fromFirestore(doc));
+        .map((doc) {
+          if (!doc.exists) return null;
+          return ChatModel.fromFirestore(doc);
+        });
   }
 }
