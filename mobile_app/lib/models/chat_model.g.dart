@@ -15,12 +15,12 @@ ChatModel _$ChatModelFromJson(Map<String, dynamic> json) => ChatModel(
   participantImages: Map<String, String>.from(json['participantImages'] as Map),
   lastMessage: json['lastMessage'] as String,
   lastMessageTime: const TimestampConverter().fromJson(
-    json['lastMessageTime'] as Timestamp,
+    json['lastMessageTime'] as Timestamp?,
   ),
   lastMessageSenderId: json['lastMessageSenderId'] as String,
   unreadCount: Map<String, int>.from(json['unreadCount'] as Map),
   createdAt: const TimestampConverter().fromJson(
-    json['createdAt'] as Timestamp,
+    json['createdAt'] as Timestamp?,
   ),
   vendorId: json['vendorId'] as String,
   buyerId: json['buyerId'] as String,

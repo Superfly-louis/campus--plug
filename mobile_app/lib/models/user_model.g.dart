@@ -18,10 +18,10 @@ UserModel _$UserModelFromJson(Map<String, dynamic> json) => UserModel(
   vendorId: json['vendorId'] as String?,
   hasSelectedRole: json['hasSelectedRole'] as bool? ?? false,
   createdAt: const TimestampConverter().fromJson(
-    json['createdAt'] as Timestamp,
+    json['createdAt'] as Timestamp?,
   ),
   lastActive: const TimestampConverter().fromJson(
-    json['lastActive'] as Timestamp,
+    json['lastActive'] as Timestamp?,
   ),
   deviceToken: json['deviceToken'] as String,
 );

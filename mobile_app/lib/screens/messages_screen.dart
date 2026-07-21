@@ -50,43 +50,72 @@ class _MessagesScreenState extends State<MessagesScreen> {
           ),
         ),
       ),
-      body: StreamBuilder<List<ChatModel>>(
-        stream: chatService.getUserChats(userId),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              !snapshot.hasData) {
-            return _buildLoadingSkeleton();
-          }
+      body: SafeArea(
+        child: StreamBuilder<List<ChatModel>>(
+          stream: chatService.getUserChats(userId),
+          builder: (context, snapshot) {
+            try {
+              if (snapshot.hasError) {
+                return _buildErrorState(snapshot.error.toString());
+              }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(
-                'Could not load conversations',
-                style: TextStyle(color: AppConstants.textSecondary),
-              ),
-            );
-          }
+              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
+                return _buildLoadingSkeleton();
+              }
 
-          final chats = snapshot.data ?? [];
-          if (chats.isEmpty) {
-            return _buildEmptyState();
-          }
+              final chats = snapshot.data ?? [];
+              if (chats.isEmpty) {
+                return _buildEmptyState();
+              }
 
-          return ListView.separated(
-            itemCount: chats.length,
-            separatorBuilder: (_, _) => const Divider(
-              height: 1,
-              indent: 76,
-              color: AppConstants.borderColor,
-            ),
-            itemBuilder: (context, index) {
-              return _ChatListTile(
-                chat: chats[index],
-                currentUserId: userId,
+              return ListView.separated(
+                itemCount: chats.length,
+                separatorBuilder: (_, _) => const Divider(
+                  height: 1,
+                  indent: 76,
+                  color: AppConstants.borderColor,
+                ),
+                itemBuilder: (context, index) {
+                  return _ChatListTile(
+                    chat: chats[index],
+                    currentUserId: userId,
+                  );
+                },
               );
-            },
-          );
-        },
+            } catch (e) {
+              return _buildErrorState('Something went wrong rendering the page.');
+            }
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorState(String error) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.error_outline, size: 64, color: Colors.redAccent),
+            const SizedBox(height: 16),
+            const Text(
+              'Could not load conversations',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: AppConstants.textPrimary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Error details: $error',
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppConstants.textSecondary, fontSize: 12),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -105,13 +134,13 @@ class _MessagesScreenState extends State<MessagesScreen> {
           contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           leading: CircleAvatar(
             radius: 28,
-            backgroundColor: AppConstants.surfaceColor,
+            backgroundColor: Colors.grey[300],
           ),
           title: Container(
             height: 14,
             width: 120,
             decoration: BoxDecoration(
-              color: AppConstants.surfaceColor,
+              color: Colors.grey[300],
               borderRadius: BorderRadius.circular(8),
             ),
           ),
@@ -121,7 +150,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
               height: 12,
               width: double.infinity,
               decoration: BoxDecoration(
-                color: AppConstants.surfaceColor,
+                color: Colors.grey[200],
                 borderRadius: BorderRadius.circular(8),
               ),
             ),

@@ -15,13 +15,25 @@ class ChatService {
     return _db
         .collection(AppConstants.chatsCollection)
         .where('participants', arrayContains: userId)
-        .orderBy('lastMessageTime', descending: true)
+        // Sorting is done locally to avoid needing a Firestore composite index
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => ChatModel.fromFirestore(doc))
-              .toList(),
-        );
+        .map((snapshot) {
+      final chats = snapshot.docs
+          .map((doc) {
+            try {
+              return ChatModel.fromFirestore(doc);
+            } catch (e) {
+              // Gracefully handle any malformed chat documents
+              return null;
+            }
+          })
+          .whereType<ChatModel>()
+          .toList();
+
+      // Sort locally: newest messages first
+      chats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+      return chats;
+    });
   }
 
   Stream<int> watchTotalUnreadCount(String userId) {
@@ -119,11 +131,18 @@ class ChatService {
         .collection(AppConstants.messagesCollection)
         .orderBy('timestamp', descending: false)
         .snapshots()
-        .map(
-          (snapshot) => snapshot.docs
-              .map((doc) => MessageModel.fromFirestore(doc))
-              .toList(),
-        );
+        .map((snapshot) {
+      return snapshot.docs
+          .map((doc) {
+            try {
+              return MessageModel.fromFirestore(doc);
+            } catch (e) {
+              return null;
+            }
+          })
+          .whereType<MessageModel>()
+          .toList();
+    });
   }
 
   Future<void> sendMessage({
@@ -238,7 +257,11 @@ class ChatService {
         .snapshots()
         .map((doc) {
           if (!doc.exists) return null;
-          return ChatModel.fromFirestore(doc);
+          try {
+            return ChatModel.fromFirestore(doc);
+          } catch (e) {
+            return null;
+          }
         });
   }
 }

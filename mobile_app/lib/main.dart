@@ -8,6 +8,8 @@ import 'services/auth_service.dart';
 import 'services/chat_service.dart';
 import 'services/firestore_service.dart';
 import 'services/storage_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:io' show Platform;
 
 import 'screens/splash_screen.dart';
 import 'screens/login_screen.dart';
@@ -25,15 +27,16 @@ void main() async {
     cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
   );
 
-  await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
-    !kDebugMode,
-  );
-
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
+  if (!kIsWeb) {
+    await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(
+      !kDebugMode,
+    );
+    FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+    PlatformDispatcher.instance.onError = (error, stack) {
+      FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+      return true;
+    };
+  }
 
   runApp(
     MultiProvider(

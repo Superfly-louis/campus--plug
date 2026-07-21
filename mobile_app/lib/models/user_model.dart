@@ -81,12 +81,17 @@ class UserModel {
   }
 }
 
-class TimestampConverter implements JsonConverter<DateTime, Timestamp> {
+class TimestampConverter implements JsonConverter<DateTime, dynamic> {
   const TimestampConverter();
 
   @override
-  DateTime fromJson(Timestamp timestamp) => timestamp.toDate();
+  DateTime fromJson(dynamic timestamp) {
+    if (timestamp is Timestamp) {
+      return timestamp.toDate();
+    }
+    return DateTime.now();
+  }
 
   @override
-  Timestamp toJson(DateTime date) => Timestamp.fromDate(date);
+  dynamic toJson(DateTime date) => Timestamp.fromDate(date);
 }
