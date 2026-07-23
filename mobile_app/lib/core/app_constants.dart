@@ -19,7 +19,7 @@ class AppConstants {
   static const Color linkBlue = Color(0xFF2F80ED);
 
   static const String authIllustrationAsset =
-      'assets/images/auth_illustration.png';
+      'assets/images/auth_hero.png';
   static const double authFieldHeight = 52;
   static const double authPillRadius = 30;
   static const double authButtonHeight = 54;

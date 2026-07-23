@@ -52,9 +52,18 @@ class ChatService {
   }) async {
     final chatDocId = ChatService.buildChatDocId(currentUserId, otherUserId);
     final docRef = _db.collection(AppConstants.chatsCollection).doc(chatDocId);
-    final existingDoc = await docRef.get();
 
-    if (existingDoc.exists) {
+    DocumentSnapshot<Map<String, dynamic>>? existingDoc;
+    try {
+      existingDoc = await docRef.get();
+    } on FirebaseException catch (e) {
+      // Rules that deny get on missing docs surface as permission-denied.
+      // Fall through and attempt create.
+      if (e.code != 'permission-denied') rethrow;
+      existingDoc = null;
+    }
+
+    if (existingDoc != null && existingDoc.exists) {
       final data = existingDoc.data() ?? {};
       if (data['vendorId'] == null || data['status'] == null) {
         await docRef.update({
@@ -72,31 +81,39 @@ class ChatService {
       return legacyChatId;
     }
 
-    await docRef.set({
-      'id': chatDocId,
-      'participants': [currentUserId, otherUserId],
-      'participantNames': {
-        currentUserId: currentUserName,
-        otherUserId: otherUserName,
-      },
-      'participantImages': {
-        currentUserId: currentUserImage,
-        otherUserId: otherUserImage,
-      },
-      'lastMessage': '',
-      'lastMessageTime': FieldValue.serverTimestamp(),
-      'lastMessageSenderId': '',
-      'unreadCount': {
-        currentUserId: 0,
-        otherUserId: 0,
-      },
-      'createdAt': FieldValue.serverTimestamp(),
-      'vendorId': vendorId,
-      'buyerId': currentUserId,
-      'subject': subject,
-      'status': 'active',
-      'blocked': <String, bool>{},
-    });
+    try {
+      await docRef.set({
+        'id': chatDocId,
+        'participants': [currentUserId, otherUserId],
+        'participantNames': {
+          currentUserId: currentUserName,
+          otherUserId: otherUserName,
+        },
+        'participantImages': {
+          currentUserId: currentUserImage,
+          otherUserId: otherUserImage,
+        },
+        'lastMessage': '',
+        'lastMessageTime': FieldValue.serverTimestamp(),
+        'lastMessageSenderId': '',
+        'unreadCount': {
+          currentUserId: 0,
+          otherUserId: 0,
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+        'vendorId': vendorId,
+        'buyerId': currentUserId,
+        'subject': subject,
+        'status': 'active',
+        'blocked': <String, bool>{},
+      });
+    } on FirebaseException catch (e) {
+      // Race: another client created it first — ID is deterministic, so reuse it.
+      if (e.code == 'permission-denied' || e.code == 'already-exists') {
+        return chatDocId;
+      }
+      rethrow;
+    }
 
     return chatDocId;
   }

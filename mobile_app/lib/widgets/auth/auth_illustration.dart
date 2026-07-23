@@ -10,9 +10,11 @@ class AuthIllustration extends StatelessWidget {
       padding: const EdgeInsets.only(top: 8, bottom: 8),
       child: Image.asset(
         AppConstants.authIllustrationAsset,
-        height: 200,
+        key: const ValueKey('auth_hero_v2'),
+        height: 220,
         fit: BoxFit.contain,
         filterQuality: FilterQuality.high,
+        gaplessPlayback: false,
       ),
     );
   }

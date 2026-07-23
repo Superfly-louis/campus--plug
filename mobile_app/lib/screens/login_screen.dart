@@ -48,9 +48,10 @@ class _LoginScreenState extends State<LoginScreen> {
               const AuthIllustration(),
               Text(
                 'Log In',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.syne(
                   fontSize: 32,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: Colors.black,
                 ),
               ),

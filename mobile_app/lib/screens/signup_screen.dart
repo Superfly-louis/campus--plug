@@ -56,9 +56,10 @@ class _SignupScreenState extends State<SignupScreen> {
               const AuthIllustration(),
               Text(
                 widget.isVendor ? 'Sign Up as Vendor' : 'Sign Up',
+                textAlign: TextAlign.center,
                 style: GoogleFonts.syne(
                   fontSize: 32,
-                  fontWeight: FontWeight.w800,
+                  fontWeight: FontWeight.w600,
                   color: Colors.black,
                 ),
               ),

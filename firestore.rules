@@ -65,10 +65,16 @@ service cloud.firestore {
       }
 
       function isChatParticipantOnCreate() {
-        return isSignedIn() && request.auth.uid in request.resource.data.participants;
+        return isSignedIn()
+          && request.auth.uid in request.resource.data.participants
+          && request.resource.data.participants.size() == 2;
       }
 
-      allow read: if isChatParticipant();
+      // Allow get on missing docs so clients can check-then-create.
+      // (rules_version 2 short-circuits || so resource.data is safe.)
+      allow get: if isSignedIn()
+        && (resource == null || request.auth.uid in resource.data.participants);
+      allow list: if isChatParticipant();
       allow create: if isChatParticipantOnCreate();
       allow update: if isChatParticipant();
 
@@ -77,8 +83,10 @@ service cloud.firestore {
           return get(/databases/$(database)/documents/chats/$(chatId));
         }
 
-        allow read, create: if isSignedIn() && request.auth.uid in parentChat().data.participants;
-        allow update, delete: if isSignedIn() && request.auth.uid in parentChat().data.participants;
+        allow read, create: if isSignedIn()
+          && request.auth.uid in parentChat().data.participants;
+        allow update, delete: if isSignedIn()
+          && request.auth.uid in parentChat().data.participants;
       }
     }
   }
