@@ -5,12 +5,18 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../core/app_constants.dart';
 import '../core/app_router.dart';
+import '../models/product_model.dart';
 import '../services/firestore_service.dart';
 import '../services/auth_service.dart';
 import '../services/storage_service.dart';
 
 class AddProductScreen extends StatefulWidget {
-  const AddProductScreen({super.key});
+  /// When non-null, screen operates in edit mode for this product.
+  final ProductModel? existingProduct;
+
+  const AddProductScreen({super.key, this.existingProduct});
+
+  bool get isEditing => existingProduct != null;
 
   @override
   State<AddProductScreen> createState() => _AddProductScreenState();
@@ -22,11 +28,68 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _priceController = TextEditingController();
   String? _selectedCategory;
   bool _isLoading = false;
+  bool _ownershipDenied = false;
   XFile? _productImage;
   Uint8List? _productImageBytes;
+  List<String> _existingImageUrls = const [];
+
+  bool get _isEditing => widget.isEditing;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingProduct;
+    if (existing != null) {
+      _nameController.text = existing.name;
+      _descriptionController.text = existing.description;
+      _priceController.text = existing.price.toStringAsFixed(
+        existing.price.truncateToDouble() == existing.price ? 0 : 2,
+      );
+      final knownCategory = AppConstants.categories.any(
+        (c) => c['id'] == existing.categoryId,
+      );
+      _selectedCategory = knownCategory ? existing.categoryId : null;
+      _existingImageUrls = List<String>.from(existing.imageUrls);
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) => _enforceOwnership());
+  }
+
+  void _enforceOwnership() {
+    if (!_isEditing) return;
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final vendorId = authService.currentUserProfile?.vendorId;
+    final productVendorId = widget.existingProduct!.vendorId;
+
+    if (vendorId == null ||
+        vendorId.isEmpty ||
+        vendorId != productVendorId) {
+      setState(() => _ownershipDenied = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can only edit products from your own shop.'),
+        ),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _descriptionController.dispose();
+    _priceController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    if (_ownershipDenied) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
@@ -44,8 +107,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Add Your Products',
-                style: TextStyle(
+                _isEditing ? 'Edit Product' : 'Add Your Products',
+                style: const TextStyle(
                   fontSize: 26,
                   fontWeight: FontWeight.w900,
                   color: AppConstants.primaryColor,
@@ -78,7 +141,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 maxLines: 3,
               ),
               const SizedBox(height: 20),
-              _buildLabel('Product Price (GHS)'),
+              _buildLabel('Product Price (${AppConstants.currencyCode})'),
               _buildTextField(
                 _priceController,
                 'e.g. 50.00',
@@ -100,57 +163,37 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     color: AppConstants.surfaceColor,
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: _productImageBytes != null
-                      ? Image.memory(
-                          _productImageBytes!,
-                          fit: BoxFit.cover,
-                          width: double.infinity,
-                        )
-                      : const Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.upload_rounded,
-                              size: 44,
-                              color: AppConstants.primaryColor,
-                            ),
-                            SizedBox(height: 8),
-                            Text(
-                              'Tap to upload image',
-                              style: TextStyle(
-                                color: AppConstants.primaryColor,
-                              ),
-                            ),
-                          ],
-                        ),
+                  child: _buildImagePreview(),
                 ),
               ),
-              const SizedBox(height: 20),
-              OutlinedButton.icon(
-                onPressed: () {
-                  // TODO: add more products to queue
-                },
-                icon: const Icon(Icons.add, color: AppConstants.primaryColor),
-                label: const Text(
-                  'Add More Products',
-                  style: TextStyle(color: AppConstants.primaryColor),
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 50),
-                  side: const BorderSide(color: AppConstants.primaryColor),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+              if (!_isEditing) ...[
+                const SizedBox(height: 20),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    // TODO: add more products to queue
+                  },
+                  icon: const Icon(Icons.add, color: AppConstants.primaryColor),
+                  label: const Text(
+                    'Add More Products',
+                    style: TextStyle(color: AppConstants.primaryColor),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(double.infinity, 50),
+                    side: const BorderSide(color: AppConstants.primaryColor),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: _isLoading ? null : _skipToShop,
-                child: const Text(
-                  'Skip for now',
-                  style: TextStyle(color: AppConstants.textSecondary),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: _isLoading ? null : _skipToShop,
+                  child: const Text(
+                    'Skip for now',
+                    style: TextStyle(color: AppConstants.textSecondary),
+                  ),
                 ),
-              ),
+              ],
               const SizedBox(height: 8),
               SizedBox(
                 width: double.infinity,
@@ -165,9 +208,9 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(color: Colors.white)
-                      : const Text(
-                          'Finish & Go to Shop',
-                          style: TextStyle(
+                      : Text(
+                          _isEditing ? 'Save Changes' : 'Finish & Go to Shop',
+                          style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
@@ -179,6 +222,43 @@ class _AddProductScreenState extends State<AddProductScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildImagePreview() {
+    if (_productImageBytes != null) {
+      return Image.memory(
+        _productImageBytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+      );
+    }
+    if (_existingImageUrls.isNotEmpty) {
+      return Image.network(
+        _existingImageUrls.first,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        errorBuilder: (_, _, _) => _uploadPlaceholder(),
+      );
+    }
+    return _uploadPlaceholder();
+  }
+
+  Widget _uploadPlaceholder() {
+    return const Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(
+          Icons.upload_rounded,
+          size: 44,
+          color: AppConstants.primaryColor,
+        ),
+        SizedBox(height: 8),
+        Text(
+          'Tap to upload image',
+          style: TextStyle(color: AppConstants.primaryColor),
+        ),
+      ],
     );
   }
 
@@ -213,6 +293,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   Future<void> _handleSubmit() async {
+    if (_isLoading) return;
     if (_nameController.text.trim().isEmpty ||
         _selectedCategory == null ||
         _priceController.text.trim().isEmpty) {
@@ -235,6 +316,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
       return;
     }
 
+    if (_isEditing && vendorId != widget.existingProduct!.vendorId) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('You can only edit products from your own shop.'),
+        ),
+      );
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final firestoreService = Provider.of<FirestoreService>(
@@ -246,7 +336,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         listen: false,
       );
 
-      final imageUrls = <String>[];
+      List<String>? imageUrls;
       if (_productImage != null) {
         final ext = _productImage!.name.split('.').last;
         final uploaded = await storageService.tryUploadImage(
@@ -255,26 +345,48 @@ class _AddProductScreenState extends State<AddProductScreen> {
           file: _productImage!,
         );
         if (uploaded != null) {
-          imageUrls.add(uploaded);
+          imageUrls = [uploaded];
         } else if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Image upload skipped — product saved without photo.',
+                _isEditing
+                    ? 'Image upload skipped — keeping the existing photo.'
+                    : 'Image upload skipped — product saved without photo.',
               ),
             ),
           );
         }
       }
 
+      final name = _nameController.text.trim();
+      final categoryId = _selectedCategory!;
+      final description = _descriptionController.text.trim();
+      final price = double.tryParse(_priceController.text.trim()) ?? 0;
+
+      if (_isEditing) {
+        await firestoreService.updateProduct(
+          productId: widget.existingProduct!.id,
+          expectedVendorId: vendorId,
+          name: name,
+          categoryId: categoryId,
+          description: description,
+          price: price,
+          imageUrls: imageUrls,
+        );
+        if (!mounted) return;
+        Navigator.pop(context, true);
+        return;
+      }
+
       await firestoreService.addProduct(
         vendorId: vendorId,
-        name: _nameController.text.trim(),
-        categoryId: _selectedCategory!,
-        description: _descriptionController.text.trim(),
-        price: double.tryParse(_priceController.text.trim()) ?? 0,
+        name: name,
+        categoryId: categoryId,
+        description: description,
+        price: price,
         campusId: user!.campusId,
-        imageUrls: imageUrls,
+        imageUrls: imageUrls ?? const [],
       );
 
       await authService.reloadProfile();
@@ -288,7 +400,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not save product: $e')),
+          SnackBar(
+            content: Text(
+              _isEditing
+                  ? 'Could not update product: $e'
+                  : 'Could not save product: $e',
+            ),
+          ),
         );
       }
     } finally {

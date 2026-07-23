@@ -14,11 +14,18 @@ class AuthService {
 
   Future<UserCredential?> signIn(String email, String password) async {
     final result = await _auth.signInWithEmailAndPassword(
-      email: email,
+      email: email.trim(),
       password: password,
     );
-    await _syncAuthToken(result.user!);
-    await _loadUserProfile(result.user!.uid);
+    final user = result.user;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'internal-error',
+        message: 'Sign-in succeeded but no user was returned.',
+      );
+    }
+    await _syncAuthToken(user);
+    await _loadUserProfile(user.uid);
     return result;
   }
 
@@ -100,10 +107,25 @@ class AuthService {
     required String campusId,
     required bool isVendor,
   }) async {
-    final result = await _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+    late final UserCredential result;
+    try {
+      result = await _auth.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    } on FirebaseAuthException catch (e) {
+      // Wrong password on an existing email — keep the signup-oriented message.
+      if (e.code == 'wrong-password' ||
+          e.code == 'invalid-credential' ||
+          e.code == 'user-not-found' ||
+          e.code == 'INVALID_LOGIN_CREDENTIALS') {
+        throw FirebaseAuthException(
+          code: 'email-already-in-use',
+          message: e.message,
+        );
+      }
+      rethrow;
+    }
     await _syncAuthToken(result.user!);
 
     final doc = await _db
@@ -124,6 +146,10 @@ class AuthService {
     }
 
     return result;
+  }
+
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _auth.sendPasswordResetEmail(email: email.trim());
   }
 
   /// Web needs a fresh ID token before Firestore rules see request.auth.

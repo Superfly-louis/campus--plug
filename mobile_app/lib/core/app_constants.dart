@@ -23,6 +23,23 @@ class AppConstants {
   static const double authFieldHeight = 52;
   static const double authPillRadius = 30;
   static const double authButtonHeight = 54;
+  static const int minPasswordLength = 6;
+  static const Duration splashDuration = Duration(seconds: 10);
+
+  /// ISO 4217 currency for Ghana (Campus Plug is GHS-only).
+  static const String currencyCode = 'GHS';
+
+  /// Local flag: marketing onboarding slides completed (device-scoped).
+  static const String onboardingCompletedKey = 'has_completed_onboarding';
+
+  /// Home product price filter bands (GHS). null min/max = unbounded.
+  static const List<Map<String, dynamic>> productPriceBands = [
+    {'id': 'all', 'label': 'Any price', 'min': null, 'max': null},
+    {'id': 'under_50', 'label': 'Under 50', 'min': 0.0, 'max': 50.0},
+    {'id': '50_100', 'label': '50–100', 'min': 50.0, 'max': 100.0},
+    {'id': '100_200', 'label': '100–200', 'min': 100.0, 'max': 200.0},
+    {'id': '200_plus', 'label': '200+', 'min': 200.0, 'max': null},
+  ];
 
   // Firestore Collections
   static const String usersCollection = 'users';

@@ -18,19 +18,14 @@ class ChatService {
         // Sorting is done locally to avoid needing a Firestore composite index
         .snapshots()
         .map((snapshot) {
-      final chats = snapshot.docs
-          .map((doc) {
-            try {
-              return ChatModel.fromFirestore(doc);
-            } catch (e) {
-              // Gracefully handle any malformed chat documents
-              return null;
-            }
-          })
-          .whereType<ChatModel>()
-          .toList();
-
-      // Sort locally: newest messages first
+      final chats = <ChatModel>[];
+      for (final doc in snapshot.docs) {
+        try {
+          chats.add(ChatModel.fromFirestore(doc));
+        } catch (_) {
+          // Skip malformed / partially-written chat docs.
+        }
+      }
       chats.sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
       return chats;
     });

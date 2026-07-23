@@ -1,13 +1,16 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/app_constants.dart';
 import '../core/app_router.dart';
+import '../core/onboarding_prefs.dart';
 import '../services/auth_service.dart';
 import '../widgets/campus_plug_logo.dart';
+import 'login_screen.dart';
 import 'onboarding_screen.dart';
-import '../core/app_constants.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -20,6 +23,8 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnim;
+  Timer? _navTimer;
+  bool _navigating = false;
 
   @override
   void initState() {
@@ -31,37 +36,67 @@ class _SplashScreenState extends State<SplashScreen>
     _fadeAnim = CurvedAnimation(parent: _controller, curve: Curves.easeOut);
     _controller.forward();
 
-    Future.delayed(const Duration(seconds: 10), _navigateNext);
+    // Wait for branding delay, then resolve session via authStateChanges
+    // (currentUser alone can be null before Auth finishes restoring).
+    _navTimer = Timer(AppConstants.splashDuration, _navigateNext);
   }
 
   Future<void> _navigateNext() async {
-    if (!mounted) return;
+    if (!mounted || _navigating) return;
+    _navigating = true;
 
-    final authUser = FirebaseAuth.instance.currentUser;
-    if (authUser == null) {
+    try {
+      final authService = Provider.of<AuthService>(context, listen: false);
+
+      // First emission is the restored session (user or null).
+      final User? authUser = await authService.authStateChanges
+          .first
+          .timeout(const Duration(seconds: 8));
+
+      if (!mounted) return;
+
+      if (authUser == null) {
+        final seenOnboarding = await OnboardingPrefs.isCompleted();
+        if (!mounted) return;
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => seenOnboarding
+                ? const LoginScreen()
+                : const OnboardingScreen(),
+          ),
+        );
+        return;
+      }
+
+      await authService.reloadProfile();
+
+      if (authService.currentUserProfile == null) {
+        await authService.ensureUserProfile(
+          uid: authUser.uid,
+          email: authUser.email ?? '',
+        );
+      }
+
+      if (!mounted) return;
+      AppRouter.go(context, authService.currentUserProfile);
+    } catch (_) {
+      if (!mounted) return;
+      final seenOnboarding = await OnboardingPrefs.isCompleted();
+      if (!mounted) return;
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      );
-      return;
-    }
-
-    final authService = Provider.of<AuthService>(context, listen: false);
-    await authService.reloadProfile();
-
-    if (authService.currentUserProfile == null) {
-      await authService.ensureUserProfile(
-        uid: authUser.uid,
-        email: authUser.email ?? '',
+        MaterialPageRoute(
+          builder: (_) =>
+              seenOnboarding ? const LoginScreen() : const OnboardingScreen(),
+        ),
       );
     }
-
-    if (!mounted) return;
-    AppRouter.go(context, authService.currentUserProfile);
   }
 
   @override
   void dispose() {
+    _navTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }

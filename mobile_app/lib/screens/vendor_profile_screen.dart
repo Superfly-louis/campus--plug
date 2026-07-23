@@ -12,6 +12,7 @@ import '../services/firestore_service.dart';
 import '../models/user_model.dart';
 import '../widgets/review_form_dialog.dart';
 import 'chat_screen.dart';
+import 'shop_create_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
 class VendorProfileScreen extends StatefulWidget {
@@ -169,11 +170,37 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
             fontSize: 18,
           ),
         ),
+        actions: [
+          StreamBuilder<VendorModel?>(
+            stream: firestoreService.watchVendor(widget.vendorId),
+            builder: (context, snapshot) {
+              final vendor = snapshot.data;
+              final uid = FirebaseAuth.instance.currentUser?.uid;
+              final isOwner = vendor != null &&
+                  uid != null &&
+                  vendor.ownerId == uid;
+              if (!isOwner) return const SizedBox.shrink();
+              return IconButton(
+                tooltip: 'Edit shop',
+                icon: const Icon(Icons.edit_outlined, color: AppConstants.textPrimary),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ShopCreateScreen(existingVendor: vendor),
+                    ),
+                  );
+                },
+              );
+            },
+          ),
+        ],
       ),
-      body: FutureBuilder<VendorModel?>(
-        future: firestoreService.getVendor(widget.vendorId),
+      body: StreamBuilder<VendorModel?>(
+        stream: firestoreService.watchVendor(widget.vendorId),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
             return const Center(child: CircularProgressIndicator(color: AppConstants.primaryColor));
           }
           if (snapshot.hasError || !snapshot.hasData || snapshot.data == null) {
@@ -475,8 +502,8 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           );
         },
       ),
-      bottomSheet: FutureBuilder<VendorModel?>(
-        future: firestoreService.getVendor(widget.vendorId),
+      bottomSheet: StreamBuilder<VendorModel?>(
+        stream: firestoreService.watchVendor(widget.vendorId),
         builder: (context, snapshot) {
           if (!snapshot.hasData || snapshot.data == null) return const SizedBox.shrink();
           final vendor = snapshot.data!;

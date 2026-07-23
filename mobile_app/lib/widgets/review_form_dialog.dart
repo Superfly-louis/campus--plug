@@ -95,104 +95,122 @@ class _ReviewFormDialogState extends State<ReviewFormDialog> {
   Widget build(BuildContext context) {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                widget.existingReview != null ? 'Edit Your Review' : 'Rate ${widget.vendorName}',
-                style: GoogleFonts.syne(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                  color: AppConstants.textPrimary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 20),
-              // Stars
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(5, (index) {
-                  final starIndex = index + 1;
-                  return IconButton(
-                    iconSize: 40,
-                    icon: Icon(
-                      starIndex <= _rating ? Icons.star_rounded : Icons.star_outline_rounded,
-                      color: Colors.amber,
-                    ),
-                    onPressed: () {
-                      setState(() {
-                        _rating = starIndex;
-                      });
-                    },
-                  );
-                }),
-              ),
-              const SizedBox(height: 20),
-              // Text field
-              TextField(
-                controller: _textController,
-                maxLength: 200,
-                maxLines: 4,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: 'Share your experience (optional, max 200 chars)...',
-                  hintStyle: GoogleFonts.syne(color: AppConstants.textSecondary, fontSize: 13),
-                  filled: true,
-                  fillColor: AppConstants.surfaceColor,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 400,
+          maxHeight: MediaQuery.sizeOf(context).height * 0.85,
+        ),
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  widget.existingReview != null
+                      ? 'Edit Your Review'
+                      : 'Rate ${widget.vendorName}',
+                  style: GoogleFonts.syne(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                    color: AppConstants.textPrimary,
                   ),
-                  contentPadding: const EdgeInsets.all(12),
+                  textAlign: TextAlign.center,
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  TextButton(
-                    onPressed: _submitting ? null : () => Navigator.pop(context),
-                    child: Text(
-                      'Cancel',
-                      style: GoogleFonts.syne(
-                        color: AppConstants.textSecondary,
-                        fontWeight: FontWeight.w600,
+                const SizedBox(height: 20),
+                // Stars
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    final starIndex = index + 1;
+                    return IconButton(
+                      iconSize: 36,
+                      visualDensity: VisualDensity.compact,
+                      icon: Icon(
+                        starIndex <= _rating
+                            ? Icons.star_rounded
+                            : Icons.star_outline_rounded,
+                        color: Colors.amber,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _rating = starIndex;
+                        });
+                      },
+                    );
+                  }),
+                ),
+                const SizedBox(height: 20),
+                // Text field
+                TextField(
+                  controller: _textController,
+                  maxLength: 200,
+                  maxLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: InputDecoration(
+                    hintText:
+                        'Share your experience (optional, max 200 chars)...',
+                    hintStyle: GoogleFonts.syne(
+                      color: AppConstants.textSecondary,
+                      fontSize: 13,
+                    ),
+                    filled: true,
+                    fillColor: AppConstants.surfaceColor,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.all(12),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed:
+                          _submitting ? null : () => Navigator.pop(context),
+                      child: Text(
+                        'Cancel',
+                        style: GoogleFonts.syne(
+                          color: AppConstants.textSecondary,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  ElevatedButton(
-                    onPressed: _submitting ? null : _submitReview,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppConstants.primaryColor,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: _submitting ? null : _submitReview,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.primaryColor,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
+                      child: _submitting
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : Text(
+                              widget.existingReview != null
+                                  ? 'Update'
+                                  : 'Submit',
+                              style: GoogleFonts.syne(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
-                    child: _submitting
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            widget.existingReview != null ? 'Update' : 'Submit',
-                            style: GoogleFonts.syne(
-                              color: Colors.white,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                  ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -8,12 +10,14 @@ import '../models/product_model.dart';
 import '../widgets/product_card.dart';
 import '../core/app_constants.dart';
 import '../models/vendor_model.dart';
+import 'login_screen.dart';
 import 'messages_screen.dart';
 import 'product_detail_screen.dart';
 import 'vendor_shop_screen.dart';
 import 'explore_screen.dart';
 import 'vendor_profile_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../core/auth_errors.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialTab = 0});
@@ -25,7 +29,15 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  String _selectedCategory = 'Food';
+  final TextEditingController _searchController = TextEditingController();
+  Timer? _debounceTimer;
+
+  String _searchQuery = '';
+  /// Category id from [AppConstants.categories], or `'all'`.
+  String _selectedCategoryId = 'all';
+  /// Price band id from [AppConstants.productPriceBands].
+  String _selectedPriceBandId = 'all';
+
   late int _currentIndex;
   bool _messagesTabVisited = false;
 
@@ -35,6 +47,52 @@ class _HomeScreenState extends State<HomeScreen> {
     _currentIndex = widget.initialTab;
     if (_currentIndex == 3) _messagesTabVisited = true;
   }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _onSearchChanged(String query) {
+    // Rebuild immediately so the clear icon appears; debounce the filter query.
+    setState(() {});
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      if (!mounted) return;
+      setState(() {
+        _searchQuery = query.trim().toLowerCase();
+      });
+    });
+  }
+
+  Map<String, dynamic> get _selectedPriceBand {
+    return AppConstants.productPriceBands.firstWhere(
+      (b) => b['id'] == _selectedPriceBandId,
+      orElse: () => AppConstants.productPriceBands.first,
+    );
+  }
+
+  List<ProductModel> _filterProducts(
+    FirestoreService firestoreService,
+    List<ProductModel> products,
+  ) {
+    final band = _selectedPriceBand;
+    return firestoreService.applyProductFilters(
+      products,
+      // Category already applied in the stream when not "all".
+      categoryId: null,
+      searchQuery: _searchQuery,
+      minPrice: band['min'] as double?,
+      maxPrice: band['max'] as double?,
+    );
+  }
+
+  bool get _hasActiveFilters =>
+      _searchQuery.isNotEmpty ||
+      _selectedCategoryId != 'all' ||
+      _selectedPriceBandId != 'all';
 
   @override
   Widget build(BuildContext context) {
@@ -135,7 +193,6 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-              // Top Header
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                 child: Row(
@@ -174,8 +231,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ],
                       onSelected: (value) async {
-                        if (value == 'logout') {
+                        if (value != 'logout') return;
+                        try {
                           await authService.signOut();
+                          if (!mounted) return;
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (_) => const LoginScreen()),
+                            (_) => false,
+                          );
+                        } catch (e) {
+                          if (!mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(friendlyAuthError(e))),
+                          );
                         }
                       },
                     ),
@@ -183,20 +252,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Search Bar
+              // Search Bar (Explore-style: live debounce + clear)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                   decoration: BoxDecoration(
                     color: AppConstants.surfaceColor,
                     borderRadius: BorderRadius.circular(15),
                   ),
-                  child: const TextField(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: _onSearchChanged,
                     decoration: InputDecoration(
                       hintText: 'Search for anything...',
                       border: InputBorder.none,
-                      icon: Icon(Icons.search, color: Colors.grey),
+                      icon: const Icon(Icons.search, color: Colors.grey),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(
+                                Icons.clear,
+                                color: AppConstants.textSecondary,
+                              ),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
                     ),
                   ),
                 ),
@@ -214,21 +297,30 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
+              const SizedBox(height: 12),
+
+              // Price bands (chip style, same as categories)
+              SizedBox(
+                height: 40,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.symmetric(horizontal: 15),
+                  children: _buildPriceChips(),
+                ),
+              ),
+
               const SizedBox(height: 32),
 
-              // Trending on Campus Section
               _buildSectionTitle('Trending on Campus'),
               _buildHorizontalProducts(firestoreService),
 
               const SizedBox(height: 32),
 
-              // Top Student Vendors Section
               _buildSectionTitle('Top Student Vendors'),
               _buildHorizontalVendors(firestoreService),
 
               const SizedBox(height: 32),
 
-              // Newly Added Section
               _buildSectionTitle('Newly Added'),
               _buildProductGrid(firestoreService),
           ],
@@ -256,11 +348,18 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Stream<List<ProductModel>> _productStream(FirestoreService firestoreService) {
+    return firestoreService.watchCampusProducts(
+      campusId: AppConstants.defaultCampusId,
+      categoryId: _selectedCategoryId,
+    );
+  }
+
   Widget _buildHorizontalProducts(FirestoreService firestoreService) {
     return SizedBox(
       height: 240,
       child: StreamBuilder<List<ProductModel>>(
-        stream: firestoreService.getProductsByCampus(AppConstants.defaultCampusId),
+        stream: _productStream(firestoreService),
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('Error: ${snapshot.error}'));
@@ -268,9 +367,11 @@ class _HomeScreenState extends State<HomeScreen> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final products = snapshot.data!;
-          if (products.isEmpty) return _buildEmptyState();
-          
+          final products = _filterProducts(firestoreService, snapshot.data!);
+          if (products.isEmpty) {
+            return _buildEmptyState(isHorizontal: true);
+          }
+
           return ListView.builder(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 15),
@@ -284,7 +385,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     product: products[index],
                     onTap: () => Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => ProductDetailScreen(product: products[index])),
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            ProductDetailScreen(product: products[index]),
+                      ),
                     ),
                   ),
                 ),
@@ -304,7 +408,11 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
           final vendors = snapshot.data!;
-          if (vendors.isEmpty) return const Center(child: Text('No vendors yet', style: TextStyle(color: Colors.grey)));
+          if (vendors.isEmpty) {
+            return const Center(
+              child: Text('No vendors yet', style: TextStyle(color: Colors.grey)),
+            );
+          }
 
           return ListView.builder(
             scrollDirection: Axis.horizontal,
@@ -328,8 +436,12 @@ class _HomeScreenState extends State<HomeScreen> {
                       CircleAvatar(
                         radius: 30,
                         backgroundColor: AppConstants.surfaceColor,
-                        backgroundImage: vendor.logoUrl.isNotEmpty ? CachedNetworkImageProvider(vendor.logoUrl) : null,
-                        child: vendor.logoUrl.isEmpty ? Text(vendor.businessName[0].toUpperCase()) : null,
+                        backgroundImage: vendor.logoUrl.isNotEmpty
+                            ? CachedNetworkImageProvider(vendor.logoUrl)
+                            : null,
+                        child: vendor.logoUrl.isEmpty
+                            ? Text(vendor.businessName[0].toUpperCase())
+                            : null,
                       ),
                       const SizedBox(height: 8),
                       SizedBox(
@@ -354,11 +466,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildProductGrid(FirestoreService firestoreService) {
     return StreamBuilder<List<ProductModel>>(
-      stream: firestoreService.getProductsByCampus(AppConstants.defaultCampusId),
+      stream: _productStream(firestoreService),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox.shrink();
-        final products = snapshot.data!;
-        
+        if (snapshot.hasError) {
+          return Padding(
+            padding: const EdgeInsets.all(20),
+            child: Text('Error: ${snapshot.error}'),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Padding(
+            padding: EdgeInsets.all(40),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final products = _filterProducts(firestoreService, snapshot.data!);
+        if (products.isEmpty) {
+          return Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: _buildEmptyState(isHorizontal: false),
+          );
+        }
+
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -375,7 +504,10 @@ class _HomeScreenState extends State<HomeScreen> {
               product: products[index],
               onTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => ProductDetailScreen(product: products[index])),
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ProductDetailScreen(product: products[index]),
+                ),
               ),
             );
           },
@@ -385,35 +517,123 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<Widget> _buildCategoryChips() {
-    return AppConstants.categories.map((category) {
-      final String categoryName = category['name'] as String;
-      final String categoryIcon = category['icon'] as String;
-      bool isSelected = _selectedCategory == categoryName;
-      return Padding(
-        padding: const EdgeInsets.only(right: 8),
-        child: ChoiceChip(
-          label: Text('$categoryIcon $categoryName'),
-          selected: isSelected,
-          onSelected: (selected) {
-            if (selected) {
-              setState(() => _selectedCategory = categoryName);
-            }
-          },
-          selectedColor: AppConstants.primaryColor,
-          labelStyle: TextStyle(
-            color: isSelected ? Colors.white : Colors.black87,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          ),
-          backgroundColor: AppConstants.surfaceColor,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-        ),
+    return [
+      _buildFilterChip(
+        label: 'All',
+        selected: _selectedCategoryId == 'all',
+        onSelected: () => setState(() => _selectedCategoryId = 'all'),
+      ),
+      ...AppConstants.categories.map((category) {
+        final String categoryId = category['id'] as String;
+        final String categoryName = category['name'] as String;
+        final String categoryIcon = category['icon'] as String;
+        final selected = _selectedCategoryId == categoryId;
+        return _buildFilterChip(
+          label: '$categoryIcon $categoryName',
+          selected: selected,
+          onSelected: () => setState(() => _selectedCategoryId = categoryId),
+        );
+      }),
+    ];
+  }
+
+  List<Widget> _buildPriceChips() {
+    return AppConstants.productPriceBands.map((band) {
+      final id = band['id'] as String;
+      final label = band['label'] as String;
+      final selected = _selectedPriceBandId == id;
+      return _buildFilterChip(
+        label: label,
+        selected: selected,
+        onSelected: () => setState(() => _selectedPriceBandId = id),
       );
     }).toList();
   }
 
-  Widget _buildEmptyState() {
+  Widget _buildFilterChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onSelected,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(label),
+        selected: selected,
+        onSelected: (_) => onSelected(),
+        selectedColor: AppConstants.primaryColor,
+        labelStyle: TextStyle(
+          color: selected ? Colors.white : Colors.black87,
+          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+        ),
+        backgroundColor: AppConstants.surfaceColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState({required bool isHorizontal}) {
+    void clearFilters() {
+      _searchController.clear();
+      setState(() {
+        _searchQuery = '';
+        _selectedCategoryId = 'all';
+        _selectedPriceBandId = 'all';
+      });
+    }
+
+    if (_hasActiveFilters) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.search_off,
+                size: isHorizontal ? 40 : 56,
+                color: AppConstants.textSecondary,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                _searchQuery.isNotEmpty
+                    ? 'No products match "$_searchQuery"'
+                    : 'No products match these filters',
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Try another category, price range, or clear filters.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppConstants.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              TextButton(
+                onPressed: clearFilters,
+                child: const Text(
+                  'Clear filters',
+                  style: TextStyle(
+                    color: AppConstants.primaryColor,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return const Center(
-      child: Text('No products yet. Be the first to sell!', style: TextStyle(color: Colors.grey)),
+      child: Text(
+        'No products yet. Be the first to sell!',
+        style: TextStyle(color: Colors.grey),
+      ),
     );
   }
 }

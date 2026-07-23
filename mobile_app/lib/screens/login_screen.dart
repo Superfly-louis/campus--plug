@@ -64,11 +64,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       label: 'E-mail',
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) return 'E-mail is required';
-                        if (!value.contains('@') || !value.contains('.')) return 'Invalid e-mail format';
-                        return null;
-                      },
+                      validator: AuthValidators.email,
                     ),
                     const SizedBox(height: 18),
                     AuthTextField(
@@ -77,10 +73,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       obscureText: _obscurePassword,
                       onToggleObscure: () =>
                           setState(() => _obscurePassword = !_obscurePassword),
-                      validator: (value) {
-                        if (value == null || value.length < 6) return 'Minimum 6 characters';
-                        return null;
-                      },
+                      validator: AuthValidators.password,
                     ),
                   ],
                 ),
@@ -88,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: _showForgotPasswordDialog,
+                  onPressed: _isLoading ? null : _showForgotPasswordDialog,
                   child: Text(
                     'Forgot password?',
                     style: GoogleFonts.syne(
@@ -152,12 +145,13 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin(AuthService authService) async {
+    if (_isLoading) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {
       await authService.signIn(
         _emailController.text.trim(),
-        _passwordController.text.trim(),
+        _passwordController.text,
       );
       if (authService.currentUserProfile == null) {
         final current = FirebaseAuth.instance.currentUser;
@@ -181,50 +175,81 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _showForgotPasswordDialog() async {
-    final resetEmailController = TextEditingController(text: _emailController.text);
-    return showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: Text('Reset Password', style: GoogleFonts.syne(fontWeight: FontWeight.w700)),
-          content: TextField(
-            controller: resetEmailController,
-            keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              hintText: 'Enter your email',
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () async {
-                final email = resetEmailController.text.trim();
-                if (email.isEmpty) return;
-                try {
-                  await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Password reset email sent. Check your inbox.')),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(friendlyAuthError(e))),
-                    );
-                  }
-                }
-              },
-              child: const Text('Confirm'),
-            ),
-          ],
-        );
-      },
-    );
+    final resetEmailController = TextEditingController(text: _emailController.text.trim());
+    final formKey = GlobalKey<FormState>();
+    var isSending = false;
+
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (dialogContext) {
+          return StatefulBuilder(
+            builder: (context, setDialogState) {
+              return AlertDialog(
+                title: Text('Reset Password', style: GoogleFonts.syne(fontWeight: FontWeight.w700)),
+                content: Form(
+                  key: formKey,
+                  child: TextFormField(
+                    controller: resetEmailController,
+                    enabled: !isSending,
+                    keyboardType: TextInputType.emailAddress,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Enter your email',
+                    ),
+                    validator: AuthValidators.email,
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: isSending ? null : () => Navigator.pop(dialogContext),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: isSending
+                        ? null
+                        : () async {
+                            if (!formKey.currentState!.validate()) return;
+                            setDialogState(() => isSending = true);
+                            try {
+                              final authService =
+                                  Provider.of<AuthService>(this.context, listen: false);
+                              await authService.sendPasswordResetEmail(
+                                resetEmailController.text.trim(),
+                              );
+                              if (!dialogContext.mounted) return;
+                              Navigator.pop(dialogContext);
+                              if (!mounted) return;
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Password reset email sent. Check your inbox.'),
+                                ),
+                              );
+                            } catch (e) {
+                              if (!dialogContext.mounted) return;
+                              setDialogState(() => isSending = false);
+                              ScaffoldMessenger.of(dialogContext).showSnackBar(
+                                SnackBar(content: Text(friendlyAuthError(e))),
+                              );
+                            }
+                          },
+                    child: isSending
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Confirm'),
+                  ),
+                ],
+              );
+            },
+          );
+        },
+      );
+    } finally {
+      resetEmailController.dispose();
+    }
   }
 }

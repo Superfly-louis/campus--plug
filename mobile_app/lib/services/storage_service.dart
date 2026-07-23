@@ -1,8 +1,15 @@
-import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 
 class StorageService {
-  final FirebaseStorage _storage = FirebaseStorage.instance;
+  static const String _cloudName = 'dfvv7uvxh';
+  static const String _uploadPreset = 'campus--plug';
+  static final Uri _uploadUri = Uri.parse(
+    'https://api.cloudinary.com/v1_1/$_cloudName/image/upload',
+  );
+
   final ImagePicker _picker = ImagePicker();
 
   Future<XFile?> pickImageFromGallery() {
@@ -14,21 +21,51 @@ class StorageService {
     );
   }
 
+  /// Uploads [file] to Cloudinary (unsigned) and returns `secure_url`.
+  ///
+  /// [storagePath] is retained for call-site compatibility (previously a
+  /// Firebase Storage object path). It is not sent to Cloudinary — unsigned
+  /// presets often disallow client-set `public_id` / `folder`.
   Future<String> uploadImage({
     required String storagePath,
     required XFile file,
   }) async {
-    final ref = _storage.ref().child(storagePath);
     final bytes = await file.readAsBytes();
-    final contentType = _contentTypeForPath(file.name);
-    await ref.putData(
-      bytes,
-      SettableMetadata(contentType: contentType),
-    );
-    return ref.getDownloadURL();
+    final filename = file.name.isNotEmpty ? file.name : 'upload.jpg';
+
+    final request = http.MultipartRequest('POST', _uploadUri)
+      ..fields['upload_preset'] = _uploadPreset
+      ..files.add(
+        http.MultipartFile.fromBytes(
+          'file',
+          bytes,
+          filename: filename,
+        ),
+      );
+
+    final streamed = await request.send();
+    final response = await http.Response.fromStream(streamed);
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        'Image upload failed (${response.statusCode})',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Image upload returned an unexpected response');
+    }
+
+    final secureUrl = decoded['secure_url'];
+    if (secureUrl is! String || secureUrl.isEmpty) {
+      throw Exception('Image upload response missing secure_url');
+    }
+
+    return secureUrl;
   }
 
-  /// Uploads when possible; returns null on failure (e.g. Storage not configured).
+  /// Uploads when possible; returns null on failure (network, timeout, API error).
   Future<String?> tryUploadImage({
     required String storagePath,
     required XFile file,
@@ -41,13 +78,5 @@ class StorageService {
     } catch (_) {
       return null;
     }
-  }
-
-  String _contentTypeForPath(String name) {
-    final lower = name.toLowerCase();
-    if (lower.endsWith('.png')) return 'image/png';
-    if (lower.endsWith('.webp')) return 'image/webp';
-    if (lower.endsWith('.gif')) return 'image/gif';
-    return 'image/jpeg';
   }
 }

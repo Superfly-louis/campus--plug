@@ -8,6 +8,7 @@ import '../services/firestore_service.dart';
 import '../widgets/product_card.dart';
 import 'add_product_screen.dart';
 import 'product_detail_screen.dart';
+import 'shop_create_screen.dart';
 
 class VendorShopScreen extends StatelessWidget {
   const VendorShopScreen({
@@ -17,13 +18,26 @@ class VendorShopScreen extends StatelessWidget {
 
   final String vendorId;
 
+  Future<void> _openEditShop(
+    BuildContext context,
+    VendorModel vendor,
+  ) async {
+    await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ShopCreateScreen(existingVendor: vendor),
+      ),
+    );
+    // Shop header uses watchVendor — stream picks up Firestore changes.
+  }
+
   @override
   Widget build(BuildContext context) {
     final firestoreService = Provider.of<FirestoreService>(context);
 
     return SafeArea(
-      child: FutureBuilder<VendorModel?>(
-        future: firestoreService.getVendor(vendorId),
+      child: StreamBuilder<VendorModel?>(
+        stream: firestoreService.watchVendor(vendorId),
         builder: (context, vendorSnapshot) {
           final vendor = vendorSnapshot.data;
           final shopName = vendor?.businessName ?? 'My Shop';
@@ -70,7 +84,16 @@ class VendorShopScreen extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (vendor != null)
+                      IconButton(
+                        tooltip: 'Edit shop',
+                        onPressed: () => _openEditShop(context, vendor),
+                        icon: const Icon(Icons.edit_outlined),
+                        color: AppConstants.primaryColor,
+                        iconSize: 26,
+                      ),
                     IconButton(
+                      tooltip: 'Add product',
                       onPressed: () {
                         Navigator.push(
                           context,

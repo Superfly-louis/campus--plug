@@ -21,14 +21,29 @@ service cloud.firestore {
     // 2. Vendors Collection
     match /vendors/{vendorId} {
       allow read: if true; // Public listings
-      allow write: if isSignedIn() && (request.resource.data.ownerId == request.auth.uid);
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid;
+      allow update: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == resource.data.ownerId;
+      allow delete: if isSignedIn()
+        && resource.data.ownerId == request.auth.uid;
     }
 
     // 3. Products Collection
     match /products/{productId} {
       allow read: if true; // Public browsing
-      allow create: if isSignedIn(); 
-      allow update, delete: if isSignedIn() && (resource.data.vendorId == request.auth.token.vendorId || resource.data.ownerId == request.auth.uid);
+      allow create: if isSignedIn();
+
+      // Owner = users/{uid}.vendorId matching product.vendorId, via vendors/{id}.ownerId
+      function ownsProductVendor() {
+        return isSignedIn()
+          && resource.data.keys().hasAll(['vendorId'])
+          && get(/databases/$(database)/documents/vendors/$(resource.data.vendorId)).data.ownerId
+            == request.auth.uid;
+      }
+
+      allow update, delete: if ownsProductVendor();
     }
 
     // 4. Reviews

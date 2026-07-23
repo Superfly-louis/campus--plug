@@ -54,37 +54,38 @@ class _MessagesScreenState extends State<MessagesScreen> {
         child: StreamBuilder<List<ChatModel>>(
           stream: chatService.getUserChats(userId),
           builder: (context, snapshot) {
-            try {
-              if (snapshot.hasError) {
-                return _buildErrorState(snapshot.error.toString());
-              }
+            if (snapshot.hasError) {
+              return _buildErrorState(snapshot.error.toString());
+            }
 
-              if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                return _buildLoadingSkeleton();
-              }
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                !snapshot.hasData) {
+              return _buildLoadingSkeleton();
+            }
 
-              final chats = snapshot.data ?? [];
-              if (chats.isEmpty) {
-                return _buildEmptyState();
-              }
+            final chats = snapshot.data ?? [];
+            if (chats.isEmpty) {
+              return _buildEmptyState();
+            }
 
-              return ListView.separated(
-                itemCount: chats.length,
-                separatorBuilder: (_, _) => const Divider(
-                  height: 1,
-                  indent: 76,
-                  color: AppConstants.borderColor,
-                ),
-                itemBuilder: (context, index) {
+            return ListView.separated(
+              itemCount: chats.length,
+              separatorBuilder: (_, _) => const Divider(
+                height: 1,
+                indent: 76,
+                color: AppConstants.borderColor,
+              ),
+              itemBuilder: (context, index) {
+                try {
                   return _ChatListTile(
                     chat: chats[index],
                     currentUserId: userId,
                   );
-                },
-              );
-            } catch (e) {
-              return _buildErrorState('Something went wrong rendering the page.');
-            }
+                } catch (_) {
+                  return const SizedBox.shrink();
+                }
+              },
+            );
           },
         ),
       ),
@@ -112,7 +113,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
             Text(
               'Error details: $error',
               textAlign: TextAlign.center,
-              style: const TextStyle(color: AppConstants.textSecondary, fontSize: 12),
+              style: const TextStyle(
+                color: AppConstants.textSecondary,
+                fontSize: 12,
+              ),
             ),
           ],
         ),
@@ -131,7 +135,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
       ),
       itemBuilder: (context, index) {
         return ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+          contentPadding:
+              const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
           leading: CircleAvatar(
             radius: 28,
             backgroundColor: Colors.grey[300],
@@ -210,31 +215,47 @@ class _ChatListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final otherId = chat.otherParticipantId(currentUserId);
-    final otherName =
-        chat.participantNames[otherId] ?? 'Campus User';
+    final otherName = chat.participantNames[otherId] ?? 'Campus User';
     final otherImage = chat.participantImages[otherId] ?? '';
     final unread = chat.unreadForUser(currentUserId);
     final timeLabel = _formatTime(chat.lastMessageTime);
+    final initial =
+        otherName.trim().isNotEmpty ? otherName.trim()[0].toUpperCase() : '?';
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-      leading: CircleAvatar(
-        radius: 28,
-        backgroundColor: AppConstants.surfaceColor,
-        backgroundImage:
-            otherImage.isNotEmpty ? CachedNetworkImageProvider(otherImage) : null,
-        child: otherImage.isEmpty
-            ? Text(
-                otherName.isNotEmpty ? otherName[0].toUpperCase() : '?',
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  color: AppConstants.primaryColor,
-                ),
-              )
-            : null,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Badge(
+        isLabelVisible: unread > 0,
+        backgroundColor: AppConstants.primaryColor,
+        label: Text(
+          unread > 99 ? '99+' : '$unread',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        child: CircleAvatar(
+          radius: 28,
+          backgroundColor: AppConstants.surfaceColor,
+          backgroundImage: otherImage.isNotEmpty
+              ? CachedNetworkImageProvider(otherImage)
+              : null,
+          child: otherImage.isEmpty
+              ? Text(
+                  initial,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppConstants.primaryColor,
+                  ),
+                )
+              : null,
+        ),
       ),
       title: Text(
         otherName,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
         style: const TextStyle(
           fontWeight: FontWeight.w600,
           color: AppConstants.textPrimary,
@@ -246,39 +267,12 @@ class _ChatListTile extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         style: const TextStyle(color: AppConstants.textSecondary),
       ),
-      trailing: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          Text(
-            timeLabel,
-            style: const TextStyle(
-              fontSize: 12,
-              color: AppConstants.textSecondary,
-            ),
-          ),
-          if (unread > 0) ...[
-            const SizedBox(height: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-              decoration: const BoxDecoration(
-                color: AppConstants.primaryColor,
-                shape: BoxShape.circle,
-              ),
-              constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
-              child: Center(
-                child: Text(
-                  unread > 99 ? '99+' : '$unread',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ],
+      trailing: Text(
+        timeLabel,
+        style: const TextStyle(
+          fontSize: 12,
+          color: AppConstants.textSecondary,
+        ),
       ),
       onTap: () {
         openExistingChatScreen(

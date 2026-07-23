@@ -8,6 +8,7 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
+import 'add_product_screen.dart';
 import 'chat_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
@@ -23,7 +24,24 @@ class ProductDetailScreen extends StatefulWidget {
 }
 
 class _ProductDetailScreenState extends State<ProductDetailScreen> {
-  ProductModel get product => widget.product;
+  late ProductModel _product;
+  bool _isDeleting = false;
+
+  ProductModel get product => _product;
+
+  bool get _isOwner {
+    final vendorId =
+        Provider.of<AuthService>(context, listen: false).currentUserProfile?.vendorId;
+    return vendorId != null &&
+        vendorId.isNotEmpty &&
+        vendorId == _product.vendorId;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _product = widget.product;
+  }
 
   Future<ChatLaunchResult> _resolveChat(String currentUserId) async {
     final authService = Provider.of<AuthService>(context, listen: false);
@@ -96,10 +114,95 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
     );
   }
 
+  Future<void> _openEdit() async {
+    if (!_isOwner) {
+      _showError('You can only edit products from your own shop.');
+      return;
+    }
+
+    final updated = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AddProductScreen(existingProduct: _product),
+      ),
+    );
+
+    if (updated == true && mounted) {
+      final firestoreService =
+          Provider.of<FirestoreService>(context, listen: false);
+      final fresh = await firestoreService.getProduct(_product.id);
+      if (fresh != null && mounted) {
+        setState(() => _product = fresh);
+      }
+    }
+  }
+
+  Future<void> _confirmDelete() async {
+    if (!_isOwner || _isDeleting) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete product?'),
+        content: Text(
+          '“${_product.name}” will be removed from your shop. This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    await _deleteProduct();
+  }
+
+  Future<void> _deleteProduct() async {
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final vendorId = authService.currentUserProfile?.vendorId;
+    if (vendorId == null || vendorId != _product.vendorId) {
+      _showError('You can only delete products from your own shop.');
+      return;
+    }
+
+    setState(() => _isDeleting = true);
+    try {
+      final firestoreService =
+          Provider.of<FirestoreService>(context, listen: false);
+      await firestoreService.deleteProduct(
+        productId: _product.id,
+        expectedVendorId: vendorId,
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Product deleted')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      _showError('Could not delete product: $e');
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final currencyFormat =
-        NumberFormat.simpleCurrency(name: 'NGN', decimalDigits: 0);
+    final currencyFormat = NumberFormat.simpleCurrency(
+      name: AppConstants.currencyCode,
+      decimalDigits: 0,
+    );
+    final isOwner = _isOwner;
 
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
@@ -108,6 +211,32 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           SliverAppBar(
             expandedHeight: 400,
             pinned: true,
+            actions: [
+              if (isOwner)
+                PopupMenuButton<String>(
+                  enabled: !_isDeleting,
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _openEdit();
+                    } else if (value == 'delete') {
+                      _confirmDelete();
+                    }
+                  },
+                  itemBuilder: (context) => const [
+                    PopupMenuItem(
+                      value: 'edit',
+                      child: Text('Edit product'),
+                    ),
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Text(
+                        'Delete product',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+            ],
             flexibleSpace: FlexibleSpaceBar(
               background: Hero(
                 tag: 'product_${product.id}',
@@ -264,58 +393,60 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
           ),
         ],
       ),
-      bottomSheet: Container(
-        height: 80,
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppConstants.backgroundColor,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.05),
-              blurRadius: 10,
-              offset: const Offset(0, -5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              flex: 2,
-              child: ElevatedButton.icon(
-                onPressed: _chatWithSeller,
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Chat with Seller'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConstants.surfaceColor,
-                  foregroundColor: AppConstants.textPrimary,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+      bottomSheet: isOwner
+          ? null
+          : Container(
+              height: 80,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              decoration: BoxDecoration(
+                color: AppConstants.backgroundColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                    offset: const Offset(0, -5),
                   ),
-                ),
+                ],
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: _chatWithSeller,
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      label: const Text('Chat with Seller'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.surfaceColor,
+                        foregroundColor: AppConstants.textPrimary,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () {},
+                      icon: const Icon(Icons.shopping_cart_outlined),
+                      label: const Text('Buy Now'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppConstants.primaryColor,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.shopping_cart_outlined),
-                label: const Text('Buy Now'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppConstants.primaryColor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

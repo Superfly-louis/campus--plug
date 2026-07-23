@@ -92,11 +92,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       label: 'E-mail',
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) return 'E-mail is required';
-                        if (!value.contains('@') || !value.contains('.')) return 'Invalid e-mail format';
-                        return null;
-                      },
+                      validator: AuthValidators.email,
                     ),
                     const SizedBox(height: 18),
                     Column(
@@ -165,10 +161,7 @@ class _SignupScreenState extends State<SignupScreen> {
                       obscureText: _obscurePassword,
                       onToggleObscure: () =>
                           setState(() => _obscurePassword = !_obscurePassword),
-                      validator: (value) {
-                        if (value == null || value.length < 6) return 'Minimum 6 characters';
-                        return null;
-                      },
+                      validator: AuthValidators.password,
                     ),
                     const SizedBox(height: 18),
                     AuthTextField(
@@ -177,10 +170,10 @@ class _SignupScreenState extends State<SignupScreen> {
                       obscureText: _obscureConfirm,
                       onToggleObscure: () =>
                           setState(() => _obscureConfirm = !_obscureConfirm),
-                      validator: (value) {
-                        if (value != _passwordController.text) return 'Passwords do not match';
-                        return null;
-                      },
+                      validator: (value) => AuthValidators.confirmPassword(
+                        value,
+                        _passwordController.text,
+                      ),
                     ),
                   ],
                 ),
@@ -211,10 +204,9 @@ class _SignupScreenState extends State<SignupScreen> {
   }
 
   Future<void> _handleSignup(AuthService authService) async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-    
+    if (_isLoading) return;
+    if (!_formKey.currentState!.validate()) return;
+
     setState(() => _isLoading = true);
     try {
       final email = _emailController.text.trim();
@@ -223,21 +215,19 @@ class _SignupScreenState extends State<SignupScreen> {
 
       await authService.signUp(
         email: email,
-        password: _passwordController.text.trim(),
+        password: _passwordController.text,
         fullName: fullName,
         phoneNumber: phoneNumber,
         campusId: _selectedCampusId!,
         isVendor: widget.isVendor,
       );
-      if (mounted) {
-        AppRouter.go(context, authService.currentUserProfile);
-      }
+      if (!mounted) return;
+      AppRouter.go(context, authService.currentUserProfile);
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(friendlyAuthError(e))),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyAuthError(e))),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
