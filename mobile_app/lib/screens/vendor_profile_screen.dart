@@ -213,6 +213,44 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
           }
 
           final vendor = snapshot.data!;
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          final isOwner = uid != null && vendor.ownerId == uid;
+          if (vendor.isSuspended && !isOwner) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.storefront_outlined,
+                      size: 48,
+                      color: AppConstants.textSecondary.withValues(alpha: 0.6),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'This shop is currently unavailable',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.syne(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: AppConstants.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Please check back later or browse other campus shops.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.syne(
+                        color: AppConstants.textSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+
           final initials = vendor.businessName.length >= 2
               ? vendor.businessName.substring(0, 2).toUpperCase()
               : vendor.businessName.toUpperCase();
@@ -505,8 +543,15 @@ class _VendorProfileScreenState extends State<VendorProfileScreen> {
       bottomSheet: StreamBuilder<VendorModel?>(
         stream: firestoreService.watchVendor(widget.vendorId),
         builder: (context, snapshot) {
-          if (!snapshot.hasData || snapshot.data == null) return const SizedBox.shrink();
+          if (!snapshot.hasData || snapshot.data == null) {
+            return const SizedBox.shrink();
+          }
           final vendor = snapshot.data!;
+          final uid = FirebaseAuth.instance.currentUser?.uid;
+          final isOwner = uid != null && vendor.ownerId == uid;
+          if (vendor.isSuspended && !isOwner) {
+            return const SizedBox.shrink();
+          }
           return Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(

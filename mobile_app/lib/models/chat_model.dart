@@ -23,6 +23,9 @@ class ChatModel {
   final String status; // 'active' or 'closed'
   final Map<String, bool>? blocked;
 
+  /// Optional product that originated this chat (from product detail).
+  final String? productId;
+
   ChatModel({
     required this.id,
     required this.participants,
@@ -38,6 +41,7 @@ class ChatModel {
     required this.subject,
     required this.status,
     this.blocked,
+    this.productId,
   });
 
   factory ChatModel.fromJson(Map<String, dynamic> json) {
@@ -55,6 +59,9 @@ class ChatModel {
     sanitized['buyerId'] = sanitized['buyerId']?.toString() ?? '';
     sanitized['subject'] = sanitized['subject']?.toString() ?? 'Order Chat';
     sanitized['status'] = sanitized['status']?.toString() ?? 'active';
+    if (sanitized['productId'] != null) {
+      sanitized['productId'] = sanitized['productId'].toString();
+    }
 
     // Generated converter casts to Timestamp? — null server timestamps
     // (pending writes) must become a real Timestamp before decode.

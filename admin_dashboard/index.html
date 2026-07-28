@@ -19,15 +19,31 @@
         <i class='bx bxs-bolt-circle'></i>
         <h2>Campus Plug Admin</h2>
       </div>
-      <p>Enter your credentials to access the dashboard</p>
+      <p>Sign in with your Firebase admin account</p>
       <form id="login-form">
         <div class="input-group">
-          <i class='bx bx-lock-alt'></i>
-          <input type="password" id="admin-password" placeholder="Admin Password" required autocomplete="current-password">
+          <i class='bx bx-envelope'></i>
+          <input type="email" id="admin-email" placeholder="Admin email" required autocomplete="username">
         </div>
-        <button type="submit" class="btn primary-btn">Login</button>
+        <div class="input-group">
+          <i class='bx bx-lock-alt'></i>
+          <input type="password" id="admin-password" placeholder="Password" required autocomplete="current-password">
+        </div>
+        <button type="submit" id="login-submit" class="btn primary-btn">Login</button>
       </form>
-      <div id="login-error" class="error-msg hidden">Invalid password.</div>
+      <div id="login-error" class="error-msg hidden" role="alert"></div>
+    </div>
+  </div>
+
+  <!-- Access Denied Overlay -->
+  <div id="access-denied-overlay" class="overlay hidden">
+    <div class="login-card glass">
+      <div class="logo">
+        <i class='bx bx-shield-x'></i>
+        <h2>Access denied</h2>
+      </div>
+      <p id="access-denied-message">This account does not have admin access.</p>
+      <button type="button" id="access-denied-signout" class="btn primary-btn">Sign out</button>
     </div>
   </div>
 
@@ -49,6 +65,14 @@
           <i class='bx bx-store-alt'></i>
           <span>Vendors</span>
         </li>
+        <li data-tab="products">
+          <i class='bx bx-package'></i>
+          <span>Products</span>
+        </li>
+        <li data-tab="audit">
+          <i class='bx bx-history'></i>
+          <span>Audit Log</span>
+        </li>
       </ul>
       <div class="sidebar-footer">
         <button id="logout-btn" class="btn ghost-btn">
@@ -63,11 +87,11 @@
       <header class="topbar">
         <div class="search-wrapper glass-input">
           <i class='bx bx-search'></i>
-          <input type="text" id="global-search" placeholder="Search vendors or chats...">
+          <input type="text" id="global-search" placeholder="Search vendors, products, or chats...">
         </div>
         <div class="user-profile">
           <img src="https://ui-avatars.com/api/?name=Admin&background=10b981&color=fff" alt="Admin Avatar" class="avatar">
-          <span>Admin</span>
+          <span id="admin-email-label">Admin</span>
         </div>
       </header>
 
@@ -167,9 +191,127 @@
         </div>
       </section>
 
+      <!-- Products View -->
+      <section id="view-products" class="view hidden">
+        <div class="header-title flex-between">
+          <div>
+            <h1>Product Moderation</h1>
+            <p>Review listings and remove policy violations</p>
+          </div>
+          <div class="actions" style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <select id="product-campus-filter" class="glass-select">
+              <option value="all">All campuses</option>
+              <option value="cu_miotso">Miotso Campus</option>
+              <option value="cu_accra">Accra Campus</option>
+              <option value="cu_tema">Tema Campus</option>
+            </select>
+            <select id="product-status-filter" class="glass-select">
+              <option value="all">All statuses</option>
+              <option value="available">Available</option>
+              <option value="sold_out">Sold out</option>
+              <option value="removed">Removed</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container glass">
+          <table id="products-table">
+            <thead>
+              <tr>
+                <th>Product</th>
+                <th>Vendor</th>
+                <th>Campus</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="products-tbody">
+               <!-- Rendered via JS -->
+            </tbody>
+          </table>
+          <div id="products-loading" class="loading-spinner"></div>
+        </div>
+      </section>
+
+      <!-- Audit Log View -->
+      <section id="view-audit" class="view hidden">
+        <div class="header-title flex-between">
+          <div>
+            <h1>Audit Log</h1>
+            <p>History of admin moderation actions</p>
+          </div>
+          <div class="actions">
+            <select id="audit-action-filter" class="glass-select">
+              <option value="all">All actions</option>
+              <option value="vendor_suspended">Vendor suspended</option>
+              <option value="vendor_reactivated">Vendor reactivated</option>
+              <option value="product_removed">Product removed</option>
+              <option value="product_restored">Product restored</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="table-container glass">
+          <table id="audit-table">
+            <thead>
+              <tr>
+                <th>Action</th>
+                <th>Target</th>
+                <th>Performed by</th>
+                <th>Reason</th>
+                <th>When</th>
+              </tr>
+            </thead>
+            <tbody id="audit-tbody">
+               <!-- Rendered via JS -->
+            </tbody>
+          </table>
+          <div id="audit-loading" class="loading-spinner"></div>
+        </div>
+      </section>
+
     </main>
   </div>
 
   <script type="module" src="app.js"></script>
+
+  <!-- Suspend confirmation modal -->
+  <div id="suspend-modal" class="overlay hidden">
+    <div class="login-card glass">
+      <div class="logo">
+        <i class='bx bx-block'></i>
+        <h2>Suspend vendor</h2>
+      </div>
+      <p>Suspend <strong id="suspend-vendor-name">this vendor</strong>? Their products will be hidden from buyers. This is reversible.</p>
+      <div class="input-group">
+        <i class='bx bx-message-detail'></i>
+        <input type="text" id="suspend-reason" placeholder="Reason for suspension" maxlength="200" required>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="suspend-cancel-btn" class="btn ghost-btn">Cancel</button>
+        <button type="button" id="suspend-confirm-btn" class="btn btn-danger">Suspend</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product remove confirmation modal -->
+  <div id="remove-product-modal" class="overlay hidden">
+    <div class="login-card glass">
+      <div class="logo">
+        <i class='bx bx-trash'></i>
+        <h2>Remove product</h2>
+      </div>
+      <p>Remove <strong id="remove-product-name">this product</strong> from public browse? This is reversible and does not delete data.</p>
+      <div class="input-group">
+        <i class='bx bx-message-detail'></i>
+        <input type="text" id="remove-product-reason" placeholder="Reason for removal" maxlength="200" required>
+      </div>
+      <div class="modal-actions">
+        <button type="button" id="remove-product-cancel-btn" class="btn ghost-btn">Cancel</button>
+        <button type="button" id="remove-product-confirm-btn" class="btn btn-danger">Remove</button>
+      </div>
+    </div>
+  </div>
 </body>
 </html>

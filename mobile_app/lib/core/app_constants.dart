@@ -29,6 +29,9 @@ class AppConstants {
   /// ISO 4217 currency for Ghana (Campus Plug is GHS-only).
   static const String currencyCode = 'GHS';
 
+  /// Typed confirmation required before deleting an account.
+  static const String deleteAccountConfirmPhrase = 'DELETE';
+
   /// Local flag: marketing onboarding slides completed (device-scoped).
   static const String onboardingCompletedKey = 'has_completed_onboarding';
 

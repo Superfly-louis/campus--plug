@@ -4,9 +4,13 @@ import 'package:provider/provider.dart';
 import '../core/app_constants.dart';
 import '../models/chat_model.dart';
 import '../models/message_model.dart';
+import '../models/order_model.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
+import '../services/firestore_service.dart';
 import '../widgets/chat_bubble.dart';
+import '../widgets/create_order_sheet.dart';
+import '../widgets/order_status_card.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -17,12 +21,16 @@ class ChatScreen extends StatefulWidget {
   final String otherUserName;
   final String otherUserImage;
 
+  /// When the chat was opened from a product, used to prefill Create Order.
+  final String? productId;
+
   const ChatScreen({
     super.key,
     required this.chatId,
     required this.otherUserId,
     required this.otherUserName,
     required this.otherUserImage,
+    this.productId,
   });
 
   @override
@@ -33,6 +41,8 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   bool _sending = false;
+  bool _creatingOrder = false;
+  String? _updatingOrderId;
   int _lastMessageCount = 0;
 
   String? get _userId => FirebaseAuth.instance.currentUser?.uid;
@@ -72,6 +82,18 @@ class _ChatScreenState extends State<ChatScreen> {
     });
   }
 
+  bool _isBuyer(ChatModel? chat) {
+    final userId = _userId;
+    if (userId == null || chat == null) return false;
+    return chat.buyerId.isNotEmpty && chat.buyerId == userId;
+  }
+
+  bool _isVendorOwnerForOrder(OrderModel order) {
+    final userId = _userId;
+    if (userId == null) return false;
+    return order.vendorOwnerId.isNotEmpty && order.vendorOwnerId == userId;
+  }
+
   Future<void> _sendMessage() async {
     final userId = _userId;
     if (userId == null || _sending) return;
@@ -95,7 +117,11 @@ class _ChatScreenState extends State<ChatScreen> {
       _messageController.clear();
       _scrollToBottom();
     } catch (e, stack) {
-      FirebaseCrashlytics.instance.recordError(e, stack, reason: 'Failed to send chat message');
+      FirebaseCrashlytics.instance.recordError(
+        e,
+        stack,
+        reason: 'Failed to send chat message',
+      );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Failed to send message: $e')),
@@ -106,9 +132,172 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  Future<void> _openCreateOrder(ChatModel chat) async {
+    final userId = _userId;
+    if (userId == null || _creatingOrder) return;
+    if (!_isBuyer(chat)) {
+      _showSnackbar('Only the buyer can create an order');
+      return;
+    }
+    if (chat.vendorId.isEmpty) {
+      _showSnackbar('This chat is not linked to a shop');
+      return;
+    }
+
+    final authService = Provider.of<AuthService>(context, listen: false);
+    final buyerName =
+        authService.currentUserProfile?.fullName ?? 'Campus User';
+
+    setState(() => _creatingOrder = true);
+    try {
+      final created = await showCreateOrderSheet(
+        context,
+        chatId: widget.chatId,
+        buyerId: userId,
+        buyerName: buyerName,
+        vendorId: chat.vendorId,
+        initialProductId: widget.productId ?? chat.productId,
+      );
+      if (created && mounted) {
+        _showSnackbar('Order created');
+      }
+    } finally {
+      if (mounted) setState(() => _creatingOrder = false);
+    }
+  }
+
+  Future<void> _updateOrderStatus(
+    OrderModel order,
+    String status, {
+    String? declineReason,
+  }) async {
+    if (_updatingOrderId != null) return;
+
+    final isVendor = _isVendorOwnerForOrder(order);
+    final isBuyer = _isBuyerForOrder(order);
+    final vendorOk = isVendor &&
+        ((order.status == OrderStatus.pending &&
+                (status == OrderStatus.confirmed ||
+                    status == OrderStatus.declined)) ||
+            (order.status == OrderStatus.confirmed &&
+                status == OrderStatus.completed));
+    final buyerOk = isBuyer &&
+        order.status == OrderStatus.pending &&
+        status == OrderStatus.cancelled;
+
+    if (!vendorOk && !buyerOk) {
+      _showSnackbar('You cannot update this order');
+      return;
+    }
+
+    setState(() => _updatingOrderId = order.id);
+    final firestore = Provider.of<FirestoreService>(context, listen: false);
+    try {
+      await firestore.updateOrderStatus(
+        orderId: order.id,
+        status: status,
+        declineReason: declineReason,
+      );
+      if (mounted) {
+        _showSnackbar('Order ${OrderStatus.label(status).toLowerCase()}');
+      }
+    } catch (e, stack) {
+      FirebaseCrashlytics.instance.recordError(
+        e,
+        stack,
+        reason: 'Failed to update order status',
+      );
+      if (mounted) {
+        _showSnackbar('Could not update order: $e');
+      }
+    } finally {
+      if (mounted) setState(() => _updatingOrderId = null);
+    }
+  }
+
+  bool _isBuyerForOrder(OrderModel order) {
+    final userId = _userId;
+    if (userId == null) return false;
+    return order.buyerId.isNotEmpty && order.buyerId == userId;
+  }
+
+  Future<void> _confirmDecline(OrderModel order) async {
+    final reasonController = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Decline order?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Decline "${order.productName}"? The buyer will see the status update.',
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: reasonController,
+              maxLines: 2,
+              maxLength: 120,
+              decoration: const InputDecoration(
+                hintText: 'Reason (optional)',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text('Decline'),
+          ),
+        ],
+      ),
+    );
+    final reason = reasonController.text.trim();
+    reasonController.dispose();
+    if (confirmed == true) {
+      await _updateOrderStatus(
+        order,
+        OrderStatus.declined,
+        declineReason: reason.isEmpty ? null : reason,
+      );
+    }
+  }
+
+  Future<void> _confirmCancel(OrderModel order) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Cancel order?'),
+        content: Text('Cancel your order for "${order.productName}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Keep'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red.shade700),
+            child: const Text('Cancel Order'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await _updateOrderStatus(order, OrderStatus.cancelled);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatService = Provider.of<ChatService>(context);
+    final firestoreService = Provider.of<FirestoreService>(context);
     final userId = _userId;
 
     if (userId == null) {
@@ -127,6 +316,8 @@ class _ChatScreenState extends State<ChatScreen> {
         final isOtherBlocked = chat?.blocked != null &&
             chat!.blocked![widget.otherUserId] == true;
         final isDisabled = isClosed || isIBlocked || isOtherBlocked;
+        final canCreateOrder =
+            _isBuyer(chat) && !isDisabled && (chat?.vendorId.isNotEmpty ?? false);
 
         return Scaffold(
           backgroundColor: AppConstants.backgroundColor,
@@ -166,7 +357,9 @@ class _ChatScreenState extends State<ChatScreen> {
                         width: 12,
                         height: 12,
                         decoration: BoxDecoration(
-                          color: isClosed ? Colors.grey : AppConstants.secondaryColor,
+                          color: isClosed
+                              ? Colors.grey
+                              : AppConstants.secondaryColor,
                           shape: BoxShape.circle,
                           border: Border.all(
                             color: AppConstants.backgroundColor,
@@ -194,7 +387,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       Text(
                         isClosed ? 'Closed' : 'Active',
                         style: TextStyle(
-                          color: isClosed ? Colors.grey : AppConstants.secondaryColor,
+                          color: isClosed
+                              ? Colors.grey
+                              : AppConstants.secondaryColor,
                           fontSize: 12,
                         ),
                       ),
@@ -204,13 +399,37 @@ class _ChatScreenState extends State<ChatScreen> {
               ],
             ),
             actions: [
+              if (canCreateOrder && chat != null)
+                IconButton(
+                  tooltip: 'Create Order',
+                  onPressed:
+                      _creatingOrder ? null : () => _openCreateOrder(chat),
+                  icon: _creatingOrder
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppConstants.primaryColor,
+                          ),
+                        )
+                      : const Icon(
+                          Icons.receipt_long_outlined,
+                          color: AppConstants.primaryColor,
+                        ),
+                ),
               if (chat != null)
                 PopupMenuButton(
-                  icon: const Icon(Icons.more_vert, color: AppConstants.textPrimary),
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: AppConstants.textPrimary,
+                  ),
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: 'toggle_block',
-                      child: Text(isOtherBlocked ? 'Unblock User' : 'Block User'),
+                      child: Text(
+                        isOtherBlocked ? 'Unblock User' : 'Block User',
+                      ),
                     ),
                     if (chat.vendorId.isNotEmpty && !isClosed)
                       const PopupMenuItem(
@@ -220,8 +439,14 @@ class _ChatScreenState extends State<ChatScreen> {
                   ],
                   onSelected: (value) async {
                     if (value == 'toggle_block') {
-                      await chatService.toggleBlock(widget.chatId, widget.otherUserId, !isOtherBlocked);
-                      _showSnackbar(isOtherBlocked ? 'User unblocked' : 'User blocked');
+                      await chatService.toggleBlock(
+                        widget.chatId,
+                        widget.otherUserId,
+                        !isOtherBlocked,
+                      );
+                      _showSnackbar(
+                        isOtherBlocked ? 'User unblocked' : 'User blocked',
+                      );
                     } else if (value == 'close_chat') {
                       await chatService.closeChat(widget.chatId);
                       _showSnackbar('Chat closed');
@@ -230,84 +455,141 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
             ],
           ),
-          body: StreamBuilder<List<MessageModel>>(
-            stream: chatService.getMessages(widget.chatId),
-            builder: (context, snapshot) {
-              final messages = snapshot.data ?? [];
-              final hasPendingMessages = messages.any((m) => m.isPending);
-              final isOffline = hasPendingMessages; // We assume offline if we have pending messages, for the sake of the banner
-
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  messages.isEmpty) {
-                return const Center(
-                  child: CircularProgressIndicator(
-                    color: AppConstants.primaryColor,
-                  ),
-                );
-              }
-
-              if (messages.length != _lastMessageCount) {
-                _lastMessageCount = messages.length;
-                if (messages.isNotEmpty) {
-                  _scrollToBottom();
-                }
-              }
-
-              return Column(
-                children: [
-                  // Connection Offline Banner
-                  if (isOffline)
-                    Container(
-                      width: double.infinity,
-                      color: Colors.orange[800],
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: const Center(
-                        child: Text(
-                          'Offline — displaying cached messages',
-                          style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold),
-                        ),
-                      ),
+          body: Column(
+            children: [
+              StreamBuilder<List<OrderModel>>(
+                stream: firestoreService.getOrdersByChat(widget.chatId),
+                builder: (context, orderSnapshot) {
+                  final orders = orderSnapshot.data ?? [];
+                  if (orders.isEmpty) return const SizedBox.shrink();
+                  return ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.32,
                     ),
-                  
-                  // Messages list
-                  Expanded(
-                    child: messages.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'Say hello to start the conversation',
-                              style: TextStyle(color: AppConstants.textSecondary),
-                            ),
-                          )
-                        : ListView.builder(
-                            controller: _scrollController,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            itemCount: messages.length,
-                            itemBuilder: (context, index) {
-                              final message = messages[index];
-                              final isMyMessage = message.senderId == userId;
-                              // Determine if message is pending sync (local queue)
-                              final isPending = isMyMessage && message.isPending;
-                              return ChatBubble(
-                                message: message,
-                                isMe: isMyMessage,
-                                isPending: isPending,
-                              );
-                            },
-                          ),
-                  ),
+                    child: ListView.builder(
+                      shrinkWrap: true,
+                      padding: const EdgeInsets.only(top: 4, bottom: 4),
+                      itemCount: orders.length,
+                      itemBuilder: (context, index) {
+                        final order = orders[index];
+                        final isOwner = _isVendorOwnerForOrder(order);
+                        final isBuyer = _isBuyerForOrder(order);
+                        return OrderStatusCard(
+                          order: order,
+                          isVendorOwner: isOwner,
+                          isBuyer: isBuyer,
+                          isUpdating: _updatingOrderId == order.id,
+                          onConfirm: isOwner
+                              ? () => _updateOrderStatus(
+                                    order,
+                                    OrderStatus.confirmed,
+                                  )
+                              : null,
+                          onDecline:
+                              isOwner ? () => _confirmDecline(order) : null,
+                          onMarkCompleted: isOwner
+                              ? () => _updateOrderStatus(
+                                    order,
+                                    OrderStatus.completed,
+                                  )
+                              : null,
+                          onCancel:
+                              isBuyer ? () => _confirmCancel(order) : null,
+                        );
+                      },
+                    ),
+                  );
+                },
+              ),
+              Expanded(
+                child: StreamBuilder<List<MessageModel>>(
+                  stream: chatService.getMessages(widget.chatId),
+                  builder: (context, snapshot) {
+                    final messages = snapshot.data ?? [];
+                    final hasPendingMessages =
+                        messages.any((m) => m.isPending);
+                    final isOffline = hasPendingMessages;
 
-                  // Closed or Blocked Banners or Input Bar
-                  if (isClosed)
-                    _buildDisabledBanner('Vendor closed this chat')
-                  else if (isIBlocked)
-                    _buildDisabledBanner('You are blocked from sending messages')
-                  else if (isOtherBlocked)
-                    _buildDisabledBanner('You blocked this user')
-                  else
-                    _buildInputBar(isDisabled),
-                ],
-              );
-            },
+                    if (snapshot.connectionState == ConnectionState.waiting &&
+                        messages.isEmpty) {
+                      return const Center(
+                        child: CircularProgressIndicator(
+                          color: AppConstants.primaryColor,
+                        ),
+                      );
+                    }
+
+                    if (messages.length != _lastMessageCount) {
+                      _lastMessageCount = messages.length;
+                      if (messages.isNotEmpty) {
+                        _scrollToBottom();
+                      }
+                    }
+
+                    return Column(
+                      children: [
+                        if (isOffline)
+                          Container(
+                            width: double.infinity,
+                            color: Colors.orange[800],
+                            padding: const EdgeInsets.symmetric(vertical: 4),
+                            child: const Center(
+                              child: Text(
+                                'Offline — displaying cached messages',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ),
+                        Expanded(
+                          child: messages.isEmpty
+                              ? const Center(
+                                  child: Text(
+                                    'Say hello to start the conversation',
+                                    style: TextStyle(
+                                      color: AppConstants.textSecondary,
+                                    ),
+                                  ),
+                                )
+                              : ListView.builder(
+                                  controller: _scrollController,
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 12,
+                                  ),
+                                  itemCount: messages.length,
+                                  itemBuilder: (context, index) {
+                                    final message = messages[index];
+                                    final isMyMessage =
+                                        message.senderId == userId;
+                                    final isPending =
+                                        isMyMessage && message.isPending;
+                                    return ChatBubble(
+                                      message: message,
+                                      isMe: isMyMessage,
+                                      isPending: isPending,
+                                    );
+                                  },
+                                ),
+                        ),
+                        if (isClosed)
+                          _buildDisabledBanner('Vendor closed this chat')
+                        else if (isIBlocked)
+                          _buildDisabledBanner(
+                            'You are blocked from sending messages',
+                          )
+                        else if (isOtherBlocked)
+                          _buildDisabledBanner('You blocked this user')
+                        else
+                          _buildInputBar(isDisabled),
+                      ],
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         );
       },
@@ -358,7 +640,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 minLines: 1,
                 maxLines: 5,
                 decoration: InputDecoration(
-                  hintText: isDisabled ? 'Chat is disabled' : 'Type a message...',
+                  hintText:
+                      isDisabled ? 'Chat is disabled' : 'Type a message...',
                   filled: true,
                   fillColor: AppConstants.surfaceColor,
                   border: OutlineInputBorder(
@@ -369,7 +652,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     horizontal: 18,
                     vertical: 12,
                   ),
-                  counterText: '', // Hide the counter to save space
+                  counterText: '',
                 ),
                 onSubmitted: (_) => isDisabled ? null : _sendMessage(),
               ),
@@ -427,6 +710,7 @@ class ChatBootstrapScreen extends StatelessWidget {
             otherUserId: result.otherUserId,
             otherUserName: result.otherUserName,
             otherUserImage: result.otherUserImage,
+            productId: result.productId,
           );
         }
 
@@ -475,12 +759,14 @@ class ChatLaunchResult {
   final String otherUserId;
   final String otherUserName;
   final String otherUserImage;
+  final String? productId;
 
   const ChatLaunchResult({
     required this.chatId,
     required this.otherUserId,
     required this.otherUserName,
     required this.otherUserImage,
+    this.productId,
   });
 }
 
@@ -575,6 +861,7 @@ void openExistingChatScreen(
   required String otherUserId,
   required String otherUserName,
   required String otherUserImage,
+  String? productId,
 }) {
   Navigator.push(
     context,
@@ -585,6 +872,7 @@ void openExistingChatScreen(
         otherUserId: otherUserId,
         otherUserName: otherUserName,
         otherUserImage: otherUserImage,
+        productId: productId,
       ),
       transitionsBuilder: (_, animation, __, child) {
         return FadeTransition(opacity: animation, child: child);

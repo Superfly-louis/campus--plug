@@ -14,14 +14,10 @@ ChatModel _$ChatModelFromJson(Map<String, dynamic> json) => ChatModel(
   participantNames: Map<String, String>.from(json['participantNames'] as Map),
   participantImages: Map<String, String>.from(json['participantImages'] as Map),
   lastMessage: json['lastMessage'] as String,
-  lastMessageTime: const TimestampConverter().fromJson(
-    json['lastMessageTime'] as Timestamp?,
-  ),
+  lastMessageTime: const TimestampConverter().fromJson(json['lastMessageTime']),
   lastMessageSenderId: json['lastMessageSenderId'] as String,
   unreadCount: Map<String, int>.from(json['unreadCount'] as Map),
-  createdAt: const TimestampConverter().fromJson(
-    json['createdAt'] as Timestamp?,
-  ),
+  createdAt: const TimestampConverter().fromJson(json['createdAt']),
   vendorId: json['vendorId'] as String,
   buyerId: json['buyerId'] as String,
   subject: json['subject'] as String,
@@ -29,6 +25,7 @@ ChatModel _$ChatModelFromJson(Map<String, dynamic> json) => ChatModel(
   blocked: (json['blocked'] as Map<String, dynamic>?)?.map(
     (k, e) => MapEntry(k, e as bool),
   ),
+  productId: json['productId'] as String?,
 );
 
 Map<String, dynamic> _$ChatModelToJson(ChatModel instance) => <String, dynamic>{
@@ -48,4 +45,5 @@ Map<String, dynamic> _$ChatModelToJson(ChatModel instance) => <String, dynamic>{
   'subject': instance.subject,
   'status': instance.status,
   'blocked': instance.blocked,
+  'productId': instance.productId,
 };

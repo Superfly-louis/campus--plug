@@ -77,7 +77,33 @@ class ProductCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  if (product.condition == 'new')
+                  if (product.isAdminRemoved)
+                    Positioned.fill(
+                      child: Container(
+                        color: Colors.black.withValues(alpha: 0.45),
+                        alignment: Alignment.center,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade700,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Text(
+                            'REMOVED',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ),
+                      ),
+                    )
+                  else if (product.condition == 'new')
                     Positioned(
                       top: 8,
                       left: 8,
@@ -118,6 +144,20 @@ class ProductCard extends StatelessWidget {
                       fontSize: 14,
                     ),
                   ),
+                  if (product.isAdminRemoved &&
+                      (product.adminRemovalReason?.isNotEmpty ?? false)) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      product.adminRemovalReason!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: Colors.red.shade700,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: 2),
                   Row(
                     children: [

@@ -78,6 +78,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       currentUserImage: currentProfile.profileImageUrl,
       vendorId: product.vendorId,
       subject: '${product.name} Order',
+      productId: product.id,
     );
 
     return ChatLaunchResult(
@@ -85,6 +86,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       otherUserId: sellerId,
       otherUserName: sellerName,
       otherUserImage: sellerImage,
+      productId: product.id,
     );
   }
 

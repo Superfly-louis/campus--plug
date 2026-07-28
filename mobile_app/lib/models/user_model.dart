@@ -16,6 +16,8 @@ class UserModel {
   final String? vendorId;
   @JsonKey(defaultValue: false)
   final bool hasSelectedRole;
+  @JsonKey(defaultValue: false)
+  final bool isAdmin;
   
   @TimestampConverter()
   final DateTime createdAt;
@@ -36,6 +38,7 @@ class UserModel {
     required this.isVendor,
     this.vendorId,
     this.hasSelectedRole = false,
+    this.isAdmin = false,
     required this.createdAt,
     required this.lastActive,
     required this.deviceToken,
@@ -54,6 +57,7 @@ class UserModel {
     bool? isVendor,
     String? vendorId,
     bool? hasSelectedRole,
+    bool? isAdmin,
     DateTime? lastActive,
     String? deviceToken,
   }) {
@@ -68,6 +72,7 @@ class UserModel {
       isVendor: isVendor ?? this.isVendor,
       vendorId: vendorId ?? this.vendorId,
       hasSelectedRole: hasSelectedRole ?? this.hasSelectedRole,
+      isAdmin: isAdmin ?? this.isAdmin,
       createdAt: this.createdAt,
       lastActive: lastActive ?? this.lastActive,
       deviceToken: deviceToken ?? this.deviceToken,

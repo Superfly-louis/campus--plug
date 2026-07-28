@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../models/user_model.dart';
 import '../core/app_constants.dart';
+import 'firestore_service.dart';
 
 class AuthService {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -181,6 +182,7 @@ class AuthService {
       'campusName': campusName,
       'isVendor': false,
       'hasSelectedRole': false,
+      'isAdmin': false,
       'createdAt': FieldValue.serverTimestamp(),
       'lastActive': FieldValue.serverTimestamp(),
       'deviceToken': '',
@@ -207,6 +209,7 @@ class AuthService {
       campusName: campusName,
       isVendor: false,
       hasSelectedRole: false,
+      isAdmin: false,
       createdAt: DateTime.now(),
       lastActive: DateTime.now(),
       deviceToken: '',
@@ -236,5 +239,87 @@ class AuthService {
   Future<void> signOut() async {
     await _auth.signOut();
     _userProfile = null;
+  }
+
+  /// Deletes owned Firestore data (products/vendor/orders/chats/reviews/user),
+  /// then the Firebase Auth user. Requires [password] for reauthentication.
+  /// Cloudinary assets are not deleted (unsigned API cannot remove them).
+  Future<void> deleteAccount({
+    required String password,
+    required FirestoreService firestoreService,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in user to delete.',
+      );
+    }
+
+    final uid = user.uid;
+    final email = user.email;
+    if (email == null || email.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'requires-recent-login',
+        message: 'Reauthentication required to delete this account.',
+      );
+    }
+
+    final credential = EmailAuthProvider.credential(
+      email: email,
+      password: password,
+    );
+    await user.reauthenticateWithCredential(credential);
+
+    final vendorId = _userProfile?.vendorId;
+    await firestoreService.deleteUserOwnedData(
+      uid: uid,
+      vendorId: vendorId,
+    );
+
+    try {
+      await user.delete();
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'requires-recent-login') {
+        await user.reauthenticateWithCredential(credential);
+        await user.delete();
+      } else {
+        rethrow;
+      }
+    }
+
+    _userProfile = null;
+  }
+
+  /// Sends a verification link to [newEmail]. Auth email updates after the user
+  /// confirms; Firestore email is left unchanged until then.
+  Future<void> updateAccountEmail({
+    required String newEmail,
+    required String password,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'no-current-user',
+        message: 'No signed-in user.',
+      );
+    }
+    final currentEmail = user.email;
+    if (currentEmail == null || currentEmail.isEmpty) {
+      throw FirebaseAuthException(
+        code: 'invalid-email',
+        message: 'Current account has no email.',
+      );
+    }
+
+    final trimmed = newEmail.trim();
+    if (trimmed.isEmpty || trimmed == currentEmail) return;
+
+    final credential = EmailAuthProvider.credential(
+      email: currentEmail,
+      password: password,
+    );
+    await user.reauthenticateWithCredential(credential);
+    await user.verifyBeforeUpdateEmail(trimmed);
   }
 }

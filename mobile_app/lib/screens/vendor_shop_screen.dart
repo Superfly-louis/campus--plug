@@ -45,6 +45,22 @@ class VendorShopScreen extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              if (vendor?.isSuspended == true)
+                Container(
+                  width: double.infinity,
+                  color: Colors.orange.shade50,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  child: Text(
+                    'Your shop is suspended from public view. Buyers cannot see your products until an admin reactivates you.',
+                    style: GoogleFonts.syne(
+                      fontSize: 13,
+                      color: Colors.orange.shade900,
+                    ),
+                  ),
+                ),
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
                 child: Row(

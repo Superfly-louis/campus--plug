@@ -25,6 +25,10 @@ ProductModel _$ProductModelFromJson(Map<String, dynamic> json) => ProductModel(
   searchKeywords: (json['searchKeywords'] as List<dynamic>)
       .map((e) => e as String)
       .toList(),
+  adminRemovalReason: json['adminRemovalReason'] as String?,
+  adminRemovedAt: const NullableTimestampConverter().fromJson(
+    json['adminRemovedAt'],
+  ),
   createdAt: const TimestampConverter().fromJson(
     json['createdAt'] as Timestamp,
   ),
@@ -46,5 +50,9 @@ Map<String, dynamic> _$ProductModelToJson(ProductModel instance) =>
       'viewCount': instance.viewCount,
       'likeCount': instance.likeCount,
       'searchKeywords': instance.searchKeywords,
+      'adminRemovalReason': instance.adminRemovalReason,
+      'adminRemovedAt': const NullableTimestampConverter().toJson(
+        instance.adminRemovedAt,
+      ),
       'createdAt': const TimestampConverter().toJson(instance.createdAt),
     };

@@ -3,6 +3,14 @@ import 'package:json_annotation/json_annotation.dart';
 
 part 'vendor_model.g.dart';
 
+/// Operating status (separate from [VendorModel.isVerified] trust badge).
+class VendorStatus {
+  static const String active = 'active';
+  static const String suspended = 'suspended';
+
+  static const List<String> values = [active, suspended];
+}
+
 @JsonSerializable(explicitToJson: true)
 class VendorModel {
   final String id;
@@ -19,6 +27,15 @@ class VendorModel {
   final String campusId;
   final int? responseTimeMinutes;
   final String? category;
+
+  /// One of [VendorStatus.values]. Missing/legacy docs are treated as active.
+  @JsonKey(defaultValue: VendorStatus.active)
+  final String status;
+
+  final String? suspensionReason;
+
+  @NullableTimestampConverter()
+  final DateTime? suspendedAt;
 
   @JsonKey(defaultValue: 0)
   final int completedOrders;
@@ -44,10 +61,15 @@ class VendorModel {
     required this.campusId,
     this.responseTimeMinutes,
     this.category,
+    this.status = VendorStatus.active,
+    this.suspensionReason,
+    this.suspendedAt,
     this.completedOrders = 0,
     this.location,
     required this.createdAt,
   });
+
+  bool get isSuspended => status == VendorStatus.suspended;
 
   factory VendorModel.fromJson(Map<String, dynamic> json) {
     // Inject category fallback from categories if category is missing
@@ -59,6 +81,10 @@ class VendorModel {
     // Inject campusId fallback from campusId or campus
     if (json['campusId'] == null && json['campus'] != null) {
       json['campusId'] = json['campus'];
+    }
+    final rawStatus = json['status']?.toString();
+    if (rawStatus == null || rawStatus.isEmpty) {
+      json['status'] = VendorStatus.active;
     }
     return _$VendorModelFromJson(json);
   }
@@ -87,4 +113,19 @@ class TimestampConverter implements JsonConverter<DateTime, Timestamp> {
 
   @override
   Timestamp toJson(DateTime date) => Timestamp.fromDate(date);
+}
+
+class NullableTimestampConverter implements JsonConverter<DateTime?, dynamic> {
+  const NullableTimestampConverter();
+
+  @override
+  DateTime? fromJson(dynamic value) {
+    if (value is Timestamp) return value.toDate();
+    if (value is DateTime) return value;
+    return null;
+  }
+
+  @override
+  dynamic toJson(DateTime? date) =>
+      date == null ? null : Timestamp.fromDate(date);
 }

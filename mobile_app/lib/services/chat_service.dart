@@ -49,6 +49,7 @@ class ChatService {
     required String currentUserImage,
     required String vendorId,
     required String subject,
+    String? productId,
   }) async {
     final chatDocId = ChatService.buildChatDocId(currentUserId, otherUserId);
     final docRef = _db.collection(AppConstants.chatsCollection).doc(chatDocId);
@@ -65,13 +66,23 @@ class ChatService {
 
     if (existingDoc != null && existingDoc.exists) {
       final data = existingDoc.data() ?? {};
+      final updates = <String, dynamic>{};
       if (data['vendorId'] == null || data['status'] == null) {
-        await docRef.update({
+        updates.addAll({
           'vendorId': vendorId,
           'buyerId': currentUserId,
           'subject': subject,
           'status': data['status'] ?? 'active',
         });
+      }
+      final existingProductId = data['productId']?.toString() ?? '';
+      if (productId != null &&
+          productId.isNotEmpty &&
+          existingProductId.isEmpty) {
+        updates['productId'] = productId;
+      }
+      if (updates.isNotEmpty) {
+        await docRef.update(updates);
       }
       return chatDocId;
     }
@@ -82,7 +93,7 @@ class ChatService {
     }
 
     try {
-      await docRef.set({
+      final payload = <String, dynamic>{
         'id': chatDocId,
         'participants': [currentUserId, otherUserId],
         'participantNames': {
@@ -106,7 +117,11 @@ class ChatService {
         'subject': subject,
         'status': 'active',
         'blocked': <String, bool>{},
-      });
+      };
+      if (productId != null && productId.isNotEmpty) {
+        payload['productId'] = productId;
+      }
+      await docRef.set(payload);
     } on FirebaseException catch (e) {
       // Race: another client created it first — ID is deterministic, so reuse it.
       if (e.code == 'permission-denied' || e.code == 'already-exists') {

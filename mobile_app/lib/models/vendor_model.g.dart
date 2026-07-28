@@ -23,6 +23,11 @@ VendorModel _$VendorModelFromJson(Map<String, dynamic> json) => VendorModel(
   campusId: json['campusId'] as String,
   responseTimeMinutes: (json['responseTimeMinutes'] as num?)?.toInt(),
   category: json['category'] as String?,
+  status: json['status'] as String? ?? VendorStatus.active,
+  suspensionReason: json['suspensionReason'] as String?,
+  suspendedAt: const NullableTimestampConverter().fromJson(
+    json['suspendedAt'],
+  ),
   completedOrders: (json['completedOrders'] as num?)?.toInt() ?? 0,
   location: const GeoPointConverter().fromJson(json['location']),
   createdAt: const TimestampConverter().fromJson(
@@ -46,6 +51,11 @@ Map<String, dynamic> _$VendorModelToJson(VendorModel instance) =>
       'campusId': instance.campusId,
       'responseTimeMinutes': instance.responseTimeMinutes,
       'category': instance.category,
+      'status': instance.status,
+      'suspensionReason': instance.suspensionReason,
+      'suspendedAt': const NullableTimestampConverter().toJson(
+        instance.suspendedAt,
+      ),
       'completedOrders': instance.completedOrders,
       'location': const GeoPointConverter().toJson(instance.location),
       'createdAt': const TimestampConverter().toJson(instance.createdAt),

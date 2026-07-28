@@ -3,6 +3,7 @@ import '../models/product_model.dart';
 import '../models/vendor_model.dart';
 import '../models/user_model.dart';
 import '../models/review_model.dart';
+import '../models/order_model.dart';
 import '../core/app_constants.dart';
 
 class FirestoreService {
@@ -11,12 +12,16 @@ class FirestoreService {
   // --- PRODUCTS ---
 
   // Fetch all products for a specific campus (sorted client-side to avoid composite index).
+  // Excludes suspended vendors' products and admin-removed listings (buyer-facing).
   Stream<List<ProductModel>> getProductsByCampus(String campusId) {
     return _db
         .collection(AppConstants.productsCollection)
         .where('campusId', isEqualTo: campusId)
         .snapshots()
-        .map((snapshot) => _parseAndSortProducts(snapshot.docs));
+        .asyncMap((snapshot) async {
+          final products = _parseAndSortProducts(snapshot.docs);
+          return _excludeBuyerHiddenProducts(products);
+        });
   }
 
   List<ProductModel> _parseProducts(
@@ -41,7 +46,35 @@ class FirestoreService {
     return products;
   }
 
+  /// Vendor ids currently marked suspended (missing status = active).
+  Future<Set<String>> _suspendedVendorIds() async {
+    final snap = await _db
+        .collection(AppConstants.vendorsCollection)
+        .where('status', isEqualTo: VendorStatus.suspended)
+        .get();
+    return snap.docs.map((d) => d.id).toSet();
+  }
+
+  Future<List<ProductModel>> _excludeSuspendedVendorProducts(
+    List<ProductModel> products,
+  ) async {
+    if (products.isEmpty) return products;
+    final suspended = await _suspendedVendorIds();
+    if (suspended.isEmpty) return products;
+    return products.where((p) => !suspended.contains(p.vendorId)).toList();
+  }
+
+  /// Buyer-facing: hide admin-removed listings and products from suspended vendors.
+  Future<List<ProductModel>> _excludeBuyerHiddenProducts(
+    List<ProductModel> products,
+  ) async {
+    final withoutRemoved =
+        products.where((p) => !p.isAdminRemoved).toList();
+    return _excludeSuspendedVendorProducts(withoutRemoved);
+  }
+
   // Fetch products by category & campus (sorted client-side to avoid composite index).
+  // Excludes suspended vendors' products and admin-removed listings (buyer-facing).
   Stream<List<ProductModel>> getProductsByCategory(
     String campusId,
     String categoryId,
@@ -51,7 +84,10 @@ class FirestoreService {
         .where('campusId', isEqualTo: campusId)
         .where('categoryId', isEqualTo: categoryId)
         .snapshots()
-        .map((snapshot) => _parseAndSortProducts(snapshot.docs));
+        .asyncMap((snapshot) async {
+          final products = _parseAndSortProducts(snapshot.docs);
+          return _excludeBuyerHiddenProducts(products);
+        });
   }
 
   /// Campus products stream, optionally narrowed by category in Firestore.
@@ -205,6 +241,7 @@ class FirestoreService {
       'ratingAverage': 0.0,
       'ratingCount': 0,
       'isVerified': false,
+      'status': VendorStatus.active,
       'whatsappNumber': '',
       'createdAt': FieldValue.serverTimestamp(),
     });
@@ -410,7 +447,8 @@ class FirestoreService {
           final vendors = <VendorModel>[];
           for (final doc in snapshot.docs) {
             try {
-              vendors.add(VendorModel.fromJson(doc.data()));
+              final vendor = VendorModel.fromJson(doc.data());
+              if (!vendor.isSuspended) vendors.add(vendor);
             } catch (_) {
               // Skip legacy/incomplete documents
             }
@@ -428,7 +466,8 @@ class FirestoreService {
     final vendors = <VendorModel>[];
     for (final doc in snapshot.docs) {
       try {
-        vendors.add(VendorModel.fromJson(doc.data()));
+        final vendor = VendorModel.fromJson(doc.data());
+        if (!vendor.isSuspended) vendors.add(vendor);
       } catch (_) {
         // Skip legacy/incomplete documents
       }
@@ -443,7 +482,8 @@ class FirestoreService {
       final vendors = <VendorModel>[];
       for (final doc in snapshot.docs) {
         try {
-          vendors.add(VendorModel.fromJson(doc.data()));
+          final vendor = VendorModel.fromJson(doc.data());
+          if (!vendor.isSuspended) vendors.add(vendor);
         } catch (_) {
           // Skip legacy/incomplete documents
         }
@@ -509,5 +549,172 @@ class FirestoreService {
       'ratingAverage': average,
       'ratingCount': count,
     });
+  }
+
+  // --- ORDERS ---
+
+  List<OrderModel> _parseAndSortOrders(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs,
+  ) {
+    final orders = <OrderModel>[];
+    for (final doc in docs) {
+      try {
+        orders.add(OrderModel.fromFirestore(doc));
+      } catch (_) {
+        // Skip legacy/incomplete documents.
+      }
+    }
+    orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return orders;
+  }
+
+  /// Creates an order doc. Generates an id when [order.id] is empty.
+  /// Uses server timestamps for createdAt / updatedAt.
+  Future<String> createOrder(OrderModel order) async {
+    final docRef = order.id.isNotEmpty
+        ? _db.collection(AppConstants.ordersCollection).doc(order.id)
+        : _db.collection(AppConstants.ordersCollection).doc();
+
+    final data = order.toJson();
+    data['id'] = docRef.id;
+    data['createdAt'] = FieldValue.serverTimestamp();
+    data['updatedAt'] = FieldValue.serverTimestamp();
+
+    await docRef.set(data);
+    return docRef.id;
+  }
+
+  Future<OrderModel?> getOrder(String orderId) async {
+    final doc = await _db
+        .collection(AppConstants.ordersCollection)
+        .doc(orderId)
+        .get();
+    if (!doc.exists || doc.data() == null) return null;
+    try {
+      return OrderModel.fromFirestore(doc);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Buyer order history (newest first, sorted client-side).
+  Stream<List<OrderModel>> getOrdersByBuyer(String buyerId) {
+    return _db
+        .collection(AppConstants.ordersCollection)
+        .where('buyerId', isEqualTo: buyerId)
+        .snapshots()
+        .map((snapshot) => _parseAndSortOrders(snapshot.docs));
+  }
+
+  /// Vendor incoming orders by shop id (newest first, sorted client-side).
+  Stream<List<OrderModel>> getOrdersByVendor(String vendorId) {
+    return _db
+        .collection(AppConstants.ordersCollection)
+        .where('vendorId', isEqualTo: vendorId)
+        .snapshots()
+        .map((snapshot) => _parseAndSortOrders(snapshot.docs));
+  }
+
+  /// Orders linked to a chat conversation (newest first, sorted client-side).
+  Stream<List<OrderModel>> getOrdersByChat(String chatId) {
+    return _db
+        .collection(AppConstants.ordersCollection)
+        .where('chatId', isEqualTo: chatId)
+        .snapshots()
+        .map((snapshot) => _parseAndSortOrders(snapshot.docs));
+  }
+
+  /// Generic status transition. Callers validate allowed transitions in UI/logic.
+  /// [declineReason] is written only when provided (typically status = declined).
+  Future<void> updateOrderStatus({
+    required String orderId,
+    required String status,
+    String? declineReason,
+  }) async {
+    if (!OrderStatus.values.contains(status)) {
+      throw ArgumentError.value(status, 'status', 'Unsupported order status');
+    }
+    final updates = <String, dynamic>{
+      'status': status,
+      'updatedAt': FieldValue.serverTimestamp(),
+    };
+    final reason = declineReason?.trim();
+    if (reason != null && reason.isNotEmpty) {
+      updates['declineReason'] = reason;
+    }
+    await _db.collection(AppConstants.ordersCollection).doc(orderId).update(updates);
+  }
+
+  /// Best-effort cascade before Auth account deletion.
+  /// Deletes: products + vendor (if [vendorId]), reviews by buyer, orders as
+  /// buyer or vendorOwner, chats (and messages) the user participates in,
+  /// then the user doc.
+  Future<void> deleteUserOwnedData({
+    required String uid,
+    String? vendorId,
+  }) async {
+    Future<void> deleteQuery(QuerySnapshot<Map<String, dynamic>> snap) async {
+      if (snap.docs.isEmpty) return;
+      var batch = _db.batch();
+      var count = 0;
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+        count++;
+        if (count >= 400) {
+          await batch.commit();
+          batch = _db.batch();
+          count = 0;
+        }
+      }
+      if (count > 0) await batch.commit();
+    }
+
+    if (vendorId != null && vendorId.isNotEmpty) {
+      final products = await _db
+          .collection(AppConstants.productsCollection)
+          .where('vendorId', isEqualTo: vendorId)
+          .get();
+      await deleteQuery(products);
+
+      try {
+        await _db.collection(AppConstants.vendorsCollection).doc(vendorId).delete();
+      } catch (_) {}
+    }
+
+    final reviewsByBuyer = await _db
+        .collection(AppConstants.reviewsCollection)
+        .where('buyerId', isEqualTo: uid)
+        .get();
+    await deleteQuery(reviewsByBuyer);
+
+    final ordersAsBuyer = await _db
+        .collection(AppConstants.ordersCollection)
+        .where('buyerId', isEqualTo: uid)
+        .get();
+    await deleteQuery(ordersAsBuyer);
+
+    final ordersAsVendor = await _db
+        .collection(AppConstants.ordersCollection)
+        .where('vendorOwnerId', isEqualTo: uid)
+        .get();
+    await deleteQuery(ordersAsVendor);
+
+    final chats = await _db
+        .collection(AppConstants.chatsCollection)
+        .where('participants', arrayContains: uid)
+        .get();
+    for (final chatDoc in chats.docs) {
+      final messages = await chatDoc.reference
+          .collection(AppConstants.messagesCollection)
+          .get();
+      await deleteQuery(messages);
+      try {
+        await chatDoc.reference.delete();
+      } catch (_) {}
+    }
+
+    try {
+      await _db.collection(AppConstants.usersCollection).doc(uid).delete();
+    } catch (_) {}
   }
 }

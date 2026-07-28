@@ -11,11 +11,23 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function isAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
+    }
+
     // 1. Users Collection
     match /users/{userId} {
       allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update, delete: if isOwner(userId);
+      // Clients must not self-grant admin on create.
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.get('isAdmin', false) == false;
+      // Owners may update their profile but cannot change isAdmin.
+      allow update: if isOwner(userId)
+        && request.resource.data.get('isAdmin', false)
+          == resource.data.get('isAdmin', false);
+      allow delete: if isOwner(userId);
     }
 
     // 2. Vendors Collection
@@ -23,9 +35,35 @@ service cloud.firestore {
       allow read: if true; // Public listings
       allow create: if isSignedIn()
         && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isSignedIn()
-        && resource.data.ownerId == request.auth.uid
-        && request.resource.data.ownerId == resource.data.ownerId;
+
+      // Owners may edit shop fields but cannot change admin-controlled fields.
+      function ownerMayUpdateVendor() {
+        return isSignedIn()
+          && resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == resource.data.ownerId
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['status', 'suspensionReason', 'suspendedAt', 'isVerified']);
+      }
+
+      // Admin verify/revoke: only isVerified may change; ownerId stays locked.
+      function adminMayToggleVerified() {
+        return isAdmin()
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['isVerified']);
+      }
+
+      // Admin suspend/reactivate: only status + audit fields may change.
+      function adminMayUpdateVendorStatus() {
+        return isAdmin()
+          && request.resource.data.ownerId == resource.data.ownerId
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'suspensionReason', 'suspendedAt']);
+      }
+
+      allow update: if ownerMayUpdateVendor()
+        || adminMayToggleVerified()
+        || adminMayUpdateVendorStatus();
       allow delete: if isSignedIn()
         && resource.data.ownerId == request.auth.uid;
     }
@@ -43,19 +81,97 @@ service cloud.firestore {
             == request.auth.uid;
       }
 
-      allow update, delete: if ownsProductVendor();
+      // Vendor may edit listing fields but cannot change moderation fields
+      // or self-restore an admin-removed product.
+      function ownerMayUpdateProduct() {
+        return ownsProductVendor()
+          && request.resource.data.vendorId == resource.data.vendorId
+          && !request.resource.data.diff(resource.data).affectedKeys()
+              .hasAny(['adminRemovalReason', 'adminRemovedAt'])
+          && (
+            resource.data.status != 'removed'
+              ? request.resource.data.status in ['available', 'sold_out']
+              : request.resource.data.status == 'removed'
+          );
+      }
+
+      // Admin remove / restore only
+      function adminMayModerateProduct() {
+        return isAdmin()
+          && request.resource.data.vendorId == resource.data.vendorId
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['status', 'adminRemovalReason', 'adminRemovedAt']);
+      }
+
+      allow update: if ownerMayUpdateProduct() || adminMayModerateProduct();
+      allow delete: if ownsProductVendor();
     }
 
     // 4. Reviews
     match /reviews/{reviewId} {
       allow read: if true;
       allow create: if isSignedIn();
-      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid);
+      allow update, delete: if isSignedIn()
+        && (resource.data.userId == request.auth.uid
+          || resource.data.buyerId == request.auth.uid);
     }
 
     // 5. Orders
     match /orders/{orderId} {
-      allow read, write: if isSignedIn() && (request.auth.uid == resource.data.customerId || request.auth.uid == resource.data.vendorOwnerId);
+      function isOrderBuyer() {
+        return isSignedIn() && request.auth.uid == resource.data.buyerId;
+      }
+      function isOrderVendorOwner() {
+        return isSignedIn() && request.auth.uid == resource.data.vendorOwnerId;
+      }
+      function isOrderParty() {
+        return isOrderBuyer() || isOrderVendorOwner();
+      }
+
+      function orderUpdateKeys() {
+        return request.resource.data.diff(resource.data).affectedKeys();
+      }
+
+      function onlyAllowedOrderUpdateKeys() {
+        return orderUpdateKeys().hasOnly(['status', 'updatedAt'])
+          || orderUpdateKeys().hasOnly(['status', 'updatedAt', 'declineReason']);
+      }
+
+      function vendorMayTransition() {
+        return isOrderVendorOwner() && (
+          (resource.data.status == 'pending'
+            && request.resource.data.status in ['confirmed', 'declined'])
+          || (resource.data.status == 'confirmed'
+            && request.resource.data.status == 'completed')
+        );
+      }
+
+      function buyerMayCancel() {
+        return isOrderBuyer()
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'cancelled';
+      }
+
+      allow create: if isSignedIn()
+        && request.resource.data.buyerId == request.auth.uid
+        && request.resource.data.status == 'pending'
+        && request.resource.data.paymentMethod == 'cash_on_delivery'
+        && request.resource.data.keys().hasAll([
+          'id', 'chatId', 'productId', 'productName', 'productImage',
+          'vendorId', 'vendorName', 'vendorOwnerId',
+          'buyerId', 'buyerName', 'campusId',
+          'quantity', 'priceAtOrder', 'totalAmount', 'currencyCode',
+          'status', 'paymentMethod', 'paymentStatus',
+          'createdAt', 'updatedAt'
+        ]);
+
+      allow get, list: if isOrderParty() || isAdmin();
+
+      allow update: if onlyAllowedOrderUpdateKeys()
+        && (vendorMayTransition() || buyerMayCancel());
+
+      // Account deletion cascade (party may remove their order docs).
+      allow delete: if isOrderParty();
     }
 
     // 6. Chats
@@ -71,12 +187,17 @@ service cloud.firestore {
       }
 
       // Allow get on missing docs so clients can check-then-create.
+      // Admins may list/read all chats for the dashboard.
       // (rules_version 2 short-circuits || so resource.data is safe.)
       allow get: if isSignedIn()
-        && (resource == null || request.auth.uid in resource.data.participants);
-      allow list: if isChatParticipant();
+        && (resource == null
+          || request.auth.uid in resource.data.participants
+          || isAdmin());
+      allow list: if isChatParticipant() || isAdmin();
       allow create: if isChatParticipantOnCreate();
       allow update: if isChatParticipant();
+      // Account deletion cascade — removes the thread for both parties.
+      allow delete: if isChatParticipant();
 
       match /messages/{messageId} {
         function parentChat() {
@@ -84,7 +205,7 @@ service cloud.firestore {
         }
 
         allow read, create: if isSignedIn()
-          && request.auth.uid in parentChat().data.participants;
+          && (request.auth.uid in parentChat().data.participants || isAdmin());
         allow update, delete: if isSignedIn()
           && request.auth.uid in parentChat().data.participants;
       }

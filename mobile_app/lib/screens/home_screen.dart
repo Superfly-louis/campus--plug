@@ -8,16 +8,16 @@ import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
 import '../models/product_model.dart';
 import '../widgets/product_card.dart';
+import '../widgets/liquid_glass_bottom_nav.dart';
 import '../core/app_constants.dart';
 import '../models/vendor_model.dart';
-import 'login_screen.dart';
 import 'messages_screen.dart';
 import 'product_detail_screen.dart';
 import 'vendor_shop_screen.dart';
 import 'explore_screen.dart';
 import 'vendor_profile_screen.dart';
+import 'profile_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../core/auth_errors.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.initialTab = 0});
@@ -105,6 +105,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Scaffold(
       backgroundColor: AppConstants.backgroundColor,
+      extendBody: true,
       body: IndexedStack(
         index: _currentIndex,
         children: [
@@ -116,59 +117,66 @@ class _HomeScreenState extends State<HomeScreen> {
           _messagesTabVisited
               ? const MessagesScreen()
               : const SizedBox.shrink(),
-          _buildPlaceholderTab('Profile', Icons.person_outline),
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) => setState(() {
-          _currentIndex = index;
-          if (index == 3) _messagesTabVisited = true;
-        }),
-        selectedItemColor: AppConstants.primaryColor,
-        unselectedItemColor: AppConstants.textSecondary,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        items: [
-          const BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Home'),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.explore_outlined),
-            label: 'Explore',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.storefront),
-            label: 'Shop',
-          ),
-          BottomNavigationBarItem(
-            icon: userId == null
-                ? const Icon(Icons.chat_bubble_outline)
-                : StreamBuilder<int>(
-                    stream: chatService.watchTotalUnreadCount(userId),
-                    builder: (context, snapshot) {
-                      final count = snapshot.data ?? 0;
-                      return Badge(
-                        isLabelVisible: count > 0,
-                        backgroundColor: AppConstants.primaryColor,
-                        label: Text(
-                          count > 99 ? '99+' : '$count',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                          ),
-                        ),
-                        child: const Icon(Icons.chat_bubble_outline),
-                      );
-                    },
-                  ),
-            label: 'Messages',
-          ),
-          const BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            label: 'Profile',
+          ProfileScreen(
+            onOpenShopTab: () => setState(() => _currentIndex = 2),
           ),
         ],
       ),
+      bottomNavigationBar: userId == null
+          ? LiquidGlassBottomNav(
+              currentIndex: _currentIndex,
+              onTap: _onNavTap,
+              items: _navItems(),
+            )
+          : StreamBuilder<int>(
+              stream: chatService.watchTotalUnreadCount(userId),
+              builder: (context, snapshot) {
+                return LiquidGlassBottomNav(
+                  currentIndex: _currentIndex,
+                  onTap: _onNavTap,
+                  items: _navItems(messagesBadge: snapshot.data ?? 0),
+                );
+              },
+            ),
     );
+  }
+
+  void _onNavTap(int index) {
+    setState(() {
+      _currentIndex = index;
+      if (index == 3) _messagesTabVisited = true;
+    });
+  }
+
+  List<LiquidGlassNavItem> _navItems({int messagesBadge = 0}) {
+    return [
+      const LiquidGlassNavItem(
+        icon: Icons.home_outlined,
+        activeIcon: Icons.home_rounded,
+        label: 'Home',
+      ),
+      const LiquidGlassNavItem(
+        icon: Icons.search,
+        activeIcon: Icons.search,
+        label: 'Explore',
+      ),
+      const LiquidGlassNavItem(
+        icon: Icons.storefront_outlined,
+        activeIcon: Icons.storefront,
+        label: 'Shop',
+      ),
+      LiquidGlassNavItem(
+        icon: Icons.chat_bubble_outline,
+        activeIcon: Icons.chat_bubble,
+        label: 'Messages',
+        badgeCount: messagesBadge,
+      ),
+      const LiquidGlassNavItem(
+        icon: Icons.person_outline,
+        activeIcon: Icons.person,
+        label: 'Profile',
+      ),
+    ];
   }
 
   Widget _buildPlaceholderTab(String title, IconData icon) {
@@ -225,26 +233,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           value: 'profile',
                           child: Text('Profile'),
                         ),
-                        const PopupMenuItem(
-                          value: 'logout',
-                          child: Text('Logout'),
-                        ),
                       ],
-                      onSelected: (value) async {
-                        if (value != 'logout') return;
-                        try {
-                          await authService.signOut();
-                          if (!mounted) return;
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (_) => const LoginScreen()),
-                            (_) => false,
-                          );
-                        } catch (e) {
-                          if (!mounted) return;
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text(friendlyAuthError(e))),
-                          );
+                      onSelected: (value) {
+                        if (value == 'profile') {
+                          setState(() => _currentIndex = 4);
                         }
                       },
                     ),
@@ -491,7 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 28),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             crossAxisSpacing: 16,
