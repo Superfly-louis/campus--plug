@@ -26,6 +26,10 @@ class AppConstants {
   static const int minPasswordLength = 6;
   static const Duration splashDuration = Duration(seconds: 10);
 
+  /// Web OAuth client ID from Firebase (needed so Android returns an ID token).
+  static const String googleWebClientId =
+      '1020489811715-4uhb5p23i1ch62rsvcggij3a2st6uguj.apps.googleusercontent.com';
+
   /// ISO 4217 currency for Ghana (Campus Plug is GHS-only).
   static const String currencyCode = 'GHS';
 

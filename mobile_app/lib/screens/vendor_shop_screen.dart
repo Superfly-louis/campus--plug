@@ -87,7 +87,7 @@ class VendorShopScreen extends StatelessWidget {
                             shopName,
                             style: GoogleFonts.syne(
                               fontSize: 22,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                           Text(

@@ -24,7 +24,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscurePassword = true;
+
+  bool get _busy => _isLoading || _isGoogleLoading;
 
   @override
   void dispose() {
@@ -82,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton(
-                  onPressed: _isLoading ? null : _showForgotPasswordDialog,
+                  onPressed: _busy ? null : _showForgotPasswordDialog,
                   child: Text(
                     'Forgot password?',
                     style: GoogleFonts.syne(
@@ -107,12 +110,13 @@ class _LoginScreenState extends State<LoginScreen> {
               AuthPillButton(
                 label: 'Log In',
                 isLoading: _isLoading,
-                onPressed: () => _handleLogin(authService),
+                onPressed: _busy ? null : () => _handleLogin(authService),
               ),
               const SizedBox(height: 14),
               AuthPillButton(
                 label: 'Log In with Google',
                 variant: AuthPillButtonVariant.social,
+                isLoading: _isGoogleLoading,
                 icon: Text(
                   'G',
                   style: GoogleFonts.syne(
@@ -120,22 +124,24 @@ class _LoginScreenState extends State<LoginScreen> {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Coming soon — use email login for now')),
-                  );
-                },
+                onPressed: _busy ? null : () => _handleGoogleLogin(authService),
               ),
               const SizedBox(height: 12),
               AuthPillButton(
                 label: 'Log In with Apple',
                 variant: AuthPillButtonVariant.social,
                 icon: const Icon(Icons.apple, size: 22),
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Coming soon — use email login for now')),
-                  );
-                },
+                onPressed: _busy
+                    ? null
+                    : () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Coming soon — use email or Google for now',
+                            ),
+                          ),
+                        );
+                      },
               ),
               const SizedBox(height: 32),
             ],
@@ -145,8 +151,26 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
+  Future<void> _handleGoogleLogin(AuthService authService) async {
+    if (_busy) return;
+    setState(() => _isGoogleLoading = true);
+    try {
+      final result = await authService.signInWithGoogle();
+      if (!mounted) return;
+      if (result == null) return; // cancelled
+      AppRouter.go(context, authService.currentUserProfile);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyAuthError(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
   Future<void> _handleLogin(AuthService authService) async {
-    if (_isLoading) return;
+    if (_busy) return;
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isLoading = true);
     try {

@@ -58,7 +58,7 @@ class LiquidGlassBottomNav extends StatelessWidget {
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 48, sigmaY: 48),
               child: Container(
-                height: 68,
+                height: 72,
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(36),
                   gradient: LinearGradient(
@@ -116,27 +116,29 @@ class _NavTab extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(28),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+        child: Center(
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 220),
             curve: Curves.easeOutCubic,
-            alignment: Alignment.center,
+            margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: selected
                   ? AppConstants.primaryColor
                   : Colors.transparent,
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
+              mainAxisSize: MainAxisSize.min,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Stack(
                   clipBehavior: Clip.none,
+                  alignment: Alignment.center,
                   children: [
                     Icon(
                       iconData,
-                      size: 22,
+                      size: 20,
                       color: AppConstants.textPrimary,
                     ),
                     if (showBadge)
@@ -173,15 +175,18 @@ class _NavTab extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                Text(
-                  item.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.syne(
-                    fontSize: 11,
-                    fontWeight:
-                        selected ? FontWeight.w700 : FontWeight.w500,
-                    color: AppConstants.textPrimary,
+                FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    item.label,
+                    maxLines: 1,
+                    softWrap: false,
+                    style: GoogleFonts.syne(
+                      fontSize: 11,
+                      fontWeight:
+                          selected ? FontWeight.w700 : FontWeight.w500,
+                      color: AppConstants.textPrimary,
+                    ),
                   ),
                 ),
               ],

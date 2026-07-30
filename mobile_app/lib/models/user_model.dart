@@ -18,6 +18,9 @@ class UserModel {
   final bool hasSelectedRole;
   @JsonKey(defaultValue: false)
   final bool isAdmin;
+
+  @JsonKey(defaultValue: <String>[])
+  final List<String> likedProductIds;
   
   @TimestampConverter()
   final DateTime createdAt;
@@ -39,6 +42,7 @@ class UserModel {
     this.vendorId,
     this.hasSelectedRole = false,
     this.isAdmin = false,
+    this.likedProductIds = const [],
     required this.createdAt,
     required this.lastActive,
     required this.deviceToken,
@@ -58,6 +62,7 @@ class UserModel {
     String? vendorId,
     bool? hasSelectedRole,
     bool? isAdmin,
+    List<String>? likedProductIds,
     DateTime? lastActive,
     String? deviceToken,
   }) {
@@ -73,6 +78,7 @@ class UserModel {
       vendorId: vendorId ?? this.vendorId,
       hasSelectedRole: hasSelectedRole ?? this.hasSelectedRole,
       isAdmin: isAdmin ?? this.isAdmin,
+      likedProductIds: likedProductIds ?? this.likedProductIds,
       createdAt: this.createdAt,
       lastActive: lastActive ?? this.lastActive,
       deviceToken: deviceToken ?? this.deviceToken,

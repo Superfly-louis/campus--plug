@@ -44,7 +44,9 @@ class AppTheme {
           backgroundColor: AppConstants.primaryColor,
           foregroundColor: Colors.white,
           elevation: 0,
-          minimumSize: const Size(double.infinity, AppConstants.authButtonHeight),
+          // Finite min width so buttons work inside Rows / Expanded.
+          // Full-width auth buttons use SizedBox(width: double.infinity) wrappers.
+          minimumSize: const Size(64, AppConstants.authButtonHeight),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppConstants.authPillRadius),
           ),

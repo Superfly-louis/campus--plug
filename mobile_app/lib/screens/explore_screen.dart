@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../core/app_constants.dart';
 import '../models/vendor_model.dart';
 import '../services/firestore_service.dart';
+import '../widgets/glass_filter_chip.dart';
 import 'vendor_profile_screen.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -143,7 +144,7 @@ class _ExploreScreenState extends State<ExploreScreen>
           'Discover Vendors',
           style: GoogleFonts.syne(
             color: AppConstants.textPrimary,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w600,
             fontSize: 22,
           ),
         ),
@@ -431,27 +432,14 @@ class _ExploreScreenState extends State<ExploreScreen>
         (id != null && _selectedCategory.toLowerCase() == id.toLowerCase()) ||
         (id == null && _selectedCategory == 'All');
 
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
-      child: ChoiceChip(
-        label: Text('$label ($count)'),
-        labelStyle: GoogleFonts.syne(
-          color: isSelected ? Colors.white : AppConstants.textPrimary,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          fontSize: 13,
-        ),
-        selected: isSelected,
-        selectedColor: AppConstants.primaryColor,
-        backgroundColor: AppConstants.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        onSelected: (selected) {
-          if (selected) {
-            setState(() {
-              _selectedCategory = id ?? 'All';
-            });
-          }
-        },
-      ),
+    return GlassFilterChip(
+      label: '$label ($count)',
+      selected: isSelected,
+      onSelected: () {
+        setState(() {
+          _selectedCategory = id ?? 'All';
+        });
+      },
     );
   }
 

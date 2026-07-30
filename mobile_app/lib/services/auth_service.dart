@@ -1,5 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user_model.dart';
 import '../core/app_constants.dart';
 import 'firestore_service.dart';
@@ -12,6 +14,16 @@ class AuthService {
   UserModel? get currentUserProfile => _userProfile;
 
   Stream<User?> get authStateChanges => _auth.authStateChanges();
+
+  bool _googleInitialized = false;
+
+  Future<void> _ensureGoogleInitialized() async {
+    if (_googleInitialized || kIsWeb) return;
+    await GoogleSignIn.instance.initialize(
+      serverClientId: AppConstants.googleWebClientId,
+    );
+    _googleInitialized = true;
+  }
 
   Future<UserCredential?> signIn(String email, String password) async {
     final result = await _auth.signInWithEmailAndPassword(
@@ -27,6 +39,55 @@ class AuthService {
     }
     await _syncAuthToken(user);
     await _loadUserProfile(user.uid);
+    return result;
+  }
+
+  /// Google OAuth — same flow for Log In and Sign Up.
+  /// Returns `null` if the user cancels the account picker.
+  Future<UserCredential?> signInWithGoogle() async {
+    late final UserCredential result;
+
+    if (kIsWeb) {
+      final provider = GoogleAuthProvider();
+      result = await _auth.signInWithPopup(provider);
+    } else {
+      await _ensureGoogleInitialized();
+      try {
+        final googleUser = await GoogleSignIn.instance.authenticate();
+        final idToken = googleUser.authentication.idToken;
+        if (idToken == null || idToken.isEmpty) {
+          throw FirebaseAuthException(
+            code: 'missing-google-id-token',
+            message:
+                'Google did not return an ID token. Check Firebase Google sign-in and SHA-1 setup.',
+          );
+        }
+        final credential = GoogleAuthProvider.credential(idToken: idToken);
+        result = await _auth.signInWithCredential(credential);
+      } on GoogleSignInException catch (e) {
+        if (e.code == GoogleSignInExceptionCode.canceled) {
+          return null;
+        }
+        rethrow;
+      }
+    }
+
+    final user = result.user;
+    if (user == null) {
+      throw FirebaseAuthException(
+        code: 'internal-error',
+        message: 'Google sign-in succeeded but no user was returned.',
+      );
+    }
+
+    await _syncAuthToken(user);
+    await ensureUserProfile(
+      uid: user.uid,
+      email: user.email ?? '',
+      fullName: user.displayName?.trim().isNotEmpty == true
+          ? user.displayName!.trim()
+          : 'Campus User',
+    );
     return result;
   }
 
@@ -183,6 +244,7 @@ class AuthService {
       'isVendor': false,
       'hasSelectedRole': false,
       'isAdmin': false,
+      'likedProductIds': <String>[],
       'createdAt': FieldValue.serverTimestamp(),
       'lastActive': FieldValue.serverTimestamp(),
       'deviceToken': '',
@@ -210,6 +272,7 @@ class AuthService {
       isVendor: false,
       hasSelectedRole: false,
       isAdmin: false,
+      likedProductIds: const [],
       createdAt: DateTime.now(),
       lastActive: DateTime.now(),
       deviceToken: '',
@@ -236,7 +299,30 @@ class AuthService {
     _userProfile = profile;
   }
 
+  /// Optimistic local favorite sync after a successful Firestore like toggle.
+  void applyLocalProductLike({
+    required String productId,
+    required bool liked,
+  }) {
+    final profile = _userProfile;
+    if (profile == null) return;
+    final ids = List<String>.from(profile.likedProductIds);
+    if (liked) {
+      if (!ids.contains(productId)) ids.add(productId);
+    } else {
+      ids.remove(productId);
+    }
+    _userProfile = profile.copyWith(likedProductIds: ids);
+  }
+
   Future<void> signOut() async {
+    try {
+      if (!kIsWeb && _googleInitialized) {
+        await GoogleSignIn.instance.signOut();
+      }
+    } catch (_) {
+      // Firebase sign-out should still proceed.
+    }
     await _auth.signOut();
     _userProfile = null;
   }

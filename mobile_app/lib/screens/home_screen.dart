@@ -8,6 +8,7 @@ import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
 import '../models/product_model.dart';
 import '../widgets/product_card.dart';
+import '../widgets/glass_filter_chip.dart';
 import '../widgets/liquid_glass_bottom_nav.dart';
 import '../core/app_constants.dart';
 import '../models/vendor_model.dart';
@@ -213,13 +214,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           'Campus Plug',
                           style: TextStyle(
                             fontSize: 28,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w600,
                             color: AppConstants.primaryColor,
                           ),
                         ),
                         Text(
                           'Marketplace for students',
-                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.grey,
+                          ),
                         ),
                       ],
                     ),
@@ -244,34 +249,57 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              // Search Bar (Explore-style: live debounce + clear)
+              // Search Bar — single field with icon + thin orange border
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  decoration: BoxDecoration(
-                    color: AppConstants.surfaceColor,
-                    borderRadius: BorderRadius.circular(15),
-                  ),
-                  child: TextField(
-                    controller: _searchController,
-                    onChanged: _onSearchChanged,
-                    decoration: InputDecoration(
-                      hintText: 'Search for anything...',
-                      border: InputBorder.none,
-                      icon: const Icon(Icons.search, color: Colors.grey),
-                      suffixIcon: _searchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(
-                                Icons.clear,
-                                color: AppConstants.textSecondary,
-                              ),
-                              onPressed: () {
-                                _searchController.clear();
-                                setState(() => _searchQuery = '');
-                              },
-                            )
-                          : null,
+                child: TextField(
+                  controller: _searchController,
+                  onChanged: _onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: 'Search for anything...',
+                    hintStyle: TextStyle(color: Colors.grey[500]),
+                    filled: true,
+                    fillColor: Colors.white,
+                    prefixIcon: const Icon(
+                      Icons.search,
+                      color: AppConstants.primaryColor,
+                    ),
+                    suffixIcon: _searchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(
+                              Icons.clear,
+                              color: AppConstants.textSecondary,
+                            ),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchQuery = '');
+                            },
+                          )
+                        : null,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: AppConstants.primaryColor,
+                        width: 1,
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: AppConstants.primaryColor,
+                        width: 1,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: AppConstants.primaryColor,
+                        width: 1.5,
+                      ),
                     ),
                   ),
                 ),
@@ -303,17 +331,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 32),
 
-              _buildSectionTitle('Trending on Campus'),
+              _buildSectionTitle(
+                'Trending on Campus',
+                onSeeAll: () => _openAllProducts(firestoreService),
+              ),
               _buildHorizontalProducts(firestoreService),
 
               const SizedBox(height: 32),
 
-              _buildSectionTitle('Top Student Vendors'),
+              _buildSectionTitle(
+                'Top Student Vendors',
+                onSeeAll: () => setState(() => _currentIndex = 1),
+              ),
               _buildHorizontalVendors(firestoreService),
 
               const SizedBox(height: 32),
 
-              _buildSectionTitle('Newly Added'),
+              _buildSectionTitle(
+                'Newly Added',
+                onSeeAll: () => _openAllProducts(firestoreService),
+              ),
               _buildProductGrid(firestoreService),
           ],
         ),
@@ -321,19 +358,45 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSectionTitle(String title) {
+  void _openAllProducts(FirestoreService firestoreService) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _AllAvailableProductsScreen(
+          categoryId: _selectedCategoryId,
+          searchQuery: _searchQuery,
+          minPrice: _selectedPriceBand['min'] as double?,
+          maxPrice: _selectedPriceBand['max'] as double?,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title, {VoidCallback? onSeeAll}) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Expanded(
+            child: Text(
+              title,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600),
+            ),
           ),
-          const Text(
-            'See All',
-            style: TextStyle(color: AppConstants.primaryColor, fontWeight: FontWeight.bold),
+          GestureDetector(
+            onTap: onSeeAll,
+            behavior: HitTestBehavior.opaque,
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+              child: Text(
+                'See All',
+                style: TextStyle(
+                  color: AppConstants.primaryColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -547,20 +610,10 @@ class _HomeScreenState extends State<HomeScreen> {
     required bool selected,
     required VoidCallback onSelected,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ChoiceChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onSelected(),
-        selectedColor: AppConstants.primaryColor,
-        labelStyle: TextStyle(
-          color: selected ? Colors.white : Colors.black87,
-          fontWeight: selected ? FontWeight.bold : FontWeight.normal,
-        ),
-        backgroundColor: AppConstants.surfaceColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+    return GlassFilterChip(
+      label: label,
+      selected: selected,
+      onSelected: onSelected,
     );
   }
 
@@ -625,6 +678,96 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Text(
         'No products yet. Be the first to sell!',
         style: TextStyle(color: Colors.grey),
+      ),
+    );
+  }
+}
+
+/// Full list of available (buyer-visible) campus products.
+class _AllAvailableProductsScreen extends StatelessWidget {
+  const _AllAvailableProductsScreen({
+    required this.categoryId,
+    required this.searchQuery,
+    this.minPrice,
+    this.maxPrice,
+  });
+
+  final String categoryId;
+  final String searchQuery;
+  final double? minPrice;
+  final double? maxPrice;
+
+  @override
+  Widget build(BuildContext context) {
+    final firestoreService = Provider.of<FirestoreService>(context);
+
+    return Scaffold(
+      backgroundColor: AppConstants.backgroundColor,
+      appBar: AppBar(
+        title: const Text(
+          'All products',
+          style: TextStyle(fontWeight: FontWeight.w600),
+        ),
+        backgroundColor: Colors.white,
+        foregroundColor: AppConstants.textPrimary,
+        elevation: 0,
+      ),
+      body: StreamBuilder<List<ProductModel>>(
+        stream: firestoreService.watchCampusProducts(
+          campusId: AppConstants.defaultCampusId,
+          categoryId: categoryId,
+        ),
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          final products = firestoreService
+              .applyProductFilters(
+                snapshot.data!,
+                categoryId: null,
+                searchQuery: searchQuery,
+                minPrice: minPrice,
+                maxPrice: maxPrice,
+              )
+              .where((p) => p.status == ProductStatus.available)
+              .toList();
+
+          if (products.isEmpty) {
+            return const Center(
+              child: Text(
+                'No available products right now.',
+                style: TextStyle(color: AppConstants.textSecondary),
+              ),
+            );
+          }
+
+          return GridView.builder(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 0.75,
+            ),
+            itemCount: products.length,
+            itemBuilder: (context, index) {
+              final product = products[index];
+              return ProductCard(
+                product: product,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => ProductDetailScreen(product: product),
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

@@ -8,8 +8,10 @@ import '../models/user_model.dart';
 import '../services/auth_service.dart';
 import '../services/chat_service.dart';
 import '../services/firestore_service.dart';
+import '../widgets/create_order_sheet.dart';
 import 'add_product_screen.dart';
 import 'chat_screen.dart';
+import 'vendor_profile_screen.dart';
 
 class ProductDetailScreen extends StatefulWidget {
   final ProductModel product;
@@ -107,6 +109,78 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
         throw error;
       }),
     );
+  }
+
+  void _visitStore() {
+    if (product.vendorId.isEmpty) {
+      _showError('Store not found for this product');
+      return;
+    }
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => VendorProfileScreen(vendorId: product.vendorId),
+      ),
+    );
+  }
+
+  Future<void> _buyNow() async {
+    final currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser == null) {
+      _showError('Please sign in to buy');
+      return;
+    }
+
+    if (_isOwner) {
+      _showError('You cannot buy your own product');
+      return;
+    }
+
+    var loadingShown = false;
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    loadingShown = true;
+
+    try {
+      final launch = await _resolveChat(currentUser.uid);
+      if (!mounted) return;
+      if (loadingShown) {
+        Navigator.pop(context);
+        loadingShown = false;
+      }
+
+      final authService = Provider.of<AuthService>(context, listen: false);
+      final buyerName =
+          authService.currentUserProfile?.fullName ?? 'Campus User';
+
+      final created = await showCreateOrderSheet(
+        context,
+        chatId: launch.chatId,
+        buyerId: currentUser.uid,
+        buyerName: buyerName,
+        vendorId: product.vendorId,
+        initialProductId: product.id,
+      );
+
+      if (!mounted) return;
+      if (created) {
+        openChatScreen(
+          context,
+          previewName: launch.otherUserName,
+          chatFuture: Future.value(launch),
+        );
+      }
+    } catch (error) {
+      if (mounted && loadingShown) {
+        Navigator.pop(context);
+      }
+      _showError(
+        error is StateError ? error.message : 'Could not start purchase: $error',
+      );
+    }
   }
 
   void _showError(String message) {
@@ -374,7 +448,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                           ),
                         ),
                         OutlinedButton(
-                          onPressed: () {},
+                          onPressed: _visitStore,
                           style: OutlinedButton.styleFrom(
                             side: const BorderSide(
                               color: AppConstants.primaryColor,
@@ -397,56 +471,73 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       ),
       bottomSheet: isOwner
           ? null
-          : Container(
-              height: 80,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                color: AppConstants.backgroundColor,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, -5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton.icon(
-                      onPressed: _chatWithSeller,
-                      icon: const Icon(Icons.chat_bubble_outline),
-                      label: const Text('Chat with Seller'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.surfaceColor,
-                        foregroundColor: AppConstants.textPrimary,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+          : SafeArea(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+                decoration: BoxDecoration(
+                  color: AppConstants.backgroundColor,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 10,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _chatWithSeller,
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Chat Seller'),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppConstants.surfaceColor,
+                          foregroundColor: AppConstants.textPrimary,
+                          elevation: 0,
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.shopping_cart_outlined),
-                      label: const Text('Buy Now'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppConstants.primaryColor,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: _buyNow,
+                        icon: const Icon(
+                          Icons.shopping_cart_outlined,
+                          size: 18,
+                        ),
+                        label: const FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text('Buy Now'),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppConstants.primaryColor,
+                          foregroundColor: Colors.white,
+                          elevation: 0,
+                          minimumSize: const Size(0, 48),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 12,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
     );

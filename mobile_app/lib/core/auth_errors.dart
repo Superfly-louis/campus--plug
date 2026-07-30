@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'app_constants.dart';
 
 /// Shared client-side validators for auth forms.
@@ -71,6 +72,8 @@ String friendlyAuthError(Object error) {
         return 'This credential is already linked to another account.';
       case 'user-mismatch':
         return 'These credentials do not match the signed-in user. Please try again.';
+      case 'missing-google-id-token':
+        return 'Google sign-in is not fully set up yet. Ask the developer to add the app SHA-1 in Firebase.';
       case 'invalid-verification-code':
       case 'invalid-verification-id':
         return 'Invalid verification code. Please try again.';
@@ -80,6 +83,13 @@ String friendlyAuthError(Object error) {
         // Never surface raw Firebase error strings to users.
         return 'Authentication failed. Please try again.';
     }
+  }
+
+  if (error is GoogleSignInException) {
+    if (error.code == GoogleSignInExceptionCode.canceled) {
+      return 'Google sign-in was cancelled.';
+    }
+    return 'Google sign-in failed. Please try again.';
   }
 
   if (error is FirebaseException && error.code == 'permission-denied') {

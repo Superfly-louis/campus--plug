@@ -220,6 +220,34 @@ class FirestoreService {
     });
   }
 
+  /// Toggle a product favorite for [userId] and adjust [likeCount] atomically.
+  Future<void> toggleProductLike({
+    required String userId,
+    required String productId,
+    required bool currentlyLiked,
+  }) async {
+    final userRef = _db.collection(AppConstants.usersCollection).doc(userId);
+    final productRef =
+        _db.collection(AppConstants.productsCollection).doc(productId);
+    final batch = _db.batch();
+    if (currentlyLiked) {
+      batch.update(userRef, {
+        'likedProductIds': FieldValue.arrayRemove([productId]),
+      });
+      batch.update(productRef, {
+        'likeCount': FieldValue.increment(-1),
+      });
+    } else {
+      batch.update(userRef, {
+        'likedProductIds': FieldValue.arrayUnion([productId]),
+      });
+      batch.update(productRef, {
+        'likeCount': FieldValue.increment(1),
+      });
+    }
+    await batch.commit();
+  }
+
   Future<String> createVendor({
     required String userId,
     required String shopName,
@@ -523,9 +551,16 @@ class FirestoreService {
         .doc(reviewId);
     final data = review.toJson();
     data['id'] = reviewId;
+    // Persist as Firestore Timestamp (json_serializable may emit DateTime).
+    data['createdAt'] = Timestamp.fromDate(review.createdAt);
+
     await reviewRef.set(data, SetOptions(merge: true));
 
-    await updateVendorRating(review.vendorId);
+    try {
+      await updateVendorRating(review.vendorId);
+    } catch (_) {
+      // Review is already saved; rating aggregate can lag if rules/network fail.
+    }
   }
 
   Future<void> updateVendorRating(String vendorId) async {

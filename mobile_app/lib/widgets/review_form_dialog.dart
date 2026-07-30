@@ -124,22 +124,35 @@ class _ReviewFormDialogState extends State<ReviewFormDialog> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(5, (index) {
                     final starIndex = index + 1;
-                    return IconButton(
-                      iconSize: 36,
-                      visualDensity: VisualDensity.compact,
-                      icon: Icon(
-                        starIndex <= _rating
-                            ? Icons.star_rounded
-                            : Icons.star_outline_rounded,
-                        color: Colors.amber,
+                    final selected = starIndex <= _rating;
+                    return GestureDetector(
+                      onTap: _submitting
+                          ? null
+                          : () => setState(() => _rating = starIndex),
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 8,
+                        ),
+                        child: Icon(
+                          selected
+                              ? Icons.star_rounded
+                              : Icons.star_outline_rounded,
+                          size: 40,
+                          color: Colors.amber,
+                        ),
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _rating = starIndex;
-                        });
-                      },
                     );
                   }),
+                ),
+                Text(
+                  '$_rating / 5',
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.syne(
+                    color: AppConstants.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 const SizedBox(height: 20),
                 // Text field
@@ -184,6 +197,12 @@ class _ReviewFormDialogState extends State<ReviewFormDialog> {
                       onPressed: _submitting ? null : _submitReview,
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppConstants.primaryColor,
+                        // Theme defaults to full-width; override for Row layout.
+                        minimumSize: const Size(88, 44),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 12,
+                        ),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),

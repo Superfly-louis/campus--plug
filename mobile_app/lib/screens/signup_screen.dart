@@ -28,8 +28,11 @@ class _SignupScreenState extends State<SignupScreen> {
   final _confirmPasswordController = TextEditingController();
   String? _selectedCampusId;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   bool _obscurePassword = true;
   bool _obscureConfirm = true;
+
+  bool get _busy => _isLoading || _isGoogleLoading;
 
   @override
   void dispose() {
@@ -194,7 +197,38 @@ class _SignupScreenState extends State<SignupScreen> {
               AuthPillButton(
                 label: 'Sign Up',
                 isLoading: _isLoading,
-                onPressed: () => _handleSignup(authService),
+                onPressed: _busy ? null : () => _handleSignup(authService),
+              ),
+              const SizedBox(height: 14),
+              AuthPillButton(
+                label: 'Sign Up with Google',
+                variant: AuthPillButtonVariant.social,
+                isLoading: _isGoogleLoading,
+                icon: Text(
+                  'G',
+                  style: GoogleFonts.syne(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                onPressed: _busy ? null : () => _handleGoogleSignup(authService),
+              ),
+              const SizedBox(height: 12),
+              AuthPillButton(
+                label: 'Sign Up with Apple',
+                variant: AuthPillButtonVariant.social,
+                icon: const Icon(Icons.apple, size: 22),
+                onPressed: _busy
+                    ? null
+                    : () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text(
+                              'Coming soon — use email or Google for now',
+                            ),
+                          ),
+                        );
+                      },
               ),
               const SizedBox(height: 32),
             ],
@@ -204,8 +238,26 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
+  Future<void> _handleGoogleSignup(AuthService authService) async {
+    if (_busy) return;
+    setState(() => _isGoogleLoading = true);
+    try {
+      final result = await authService.signInWithGoogle();
+      if (!mounted) return;
+      if (result == null) return;
+      AppRouter.go(context, authService.currentUserProfile);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(friendlyAuthError(e))),
+      );
+    } finally {
+      if (mounted) setState(() => _isGoogleLoading = false);
+    }
+  }
+
   Future<void> _handleSignup(AuthService authService) async {
-    if (_isLoading) return;
+    if (_busy) return;
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
